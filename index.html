@@ -8,8 +8,10 @@
   <body ng-controller="AppController as app">
     <!-- <map center='{lat:47.605755, lng:-122.335955}' options='{draggable:false, disableDefaultUI:true}' zoom="12" styles='app.styles'></map> -->
     <map>
+      <polygon options="app.polygonOptions"></polygon>
+
       <polygon options="app.polygonOptions">
-        <!--<path ng-model="app.polygonPath"></path>-->
+        <path ng-model="app.polygonPath"></path>
       </polygon>
     </map>
   </body>
