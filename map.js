@@ -9,7 +9,7 @@
     .directive('map', mapDirective);
 
   MapOptionsModel.$inject = ['Coordinate'];
-  LazyLoadGoogleMap.$inject = ['$window', '$q'];
+  LazyLoadGoogleMap.$inject = ['$window', '$q', '$timeout'];
   GoogleMap.$inject = ['LazyLoadGoogleMap', 'MapOptions'];
   mapDirective.$inject = ['GoogleMap'];
 
@@ -100,7 +100,7 @@
     return MapOptions;
   }
 
-  function LazyLoadGoogleMap($window, $q){
+  function LazyLoadGoogleMap($window, $q, $timeout){
     this.load = function(key) {
       function loadScript(){
         var script = document.createElement('script');
@@ -111,11 +111,15 @@
       }
 
       var deferred = $q.defer()
-      $window.initGoogleMap = function(){ deferred.resolve() }
+      if($window.google && $window.google.maps){
+        $timeout(function(){deferred.resolve();});
+      } else {
+        $window.initGoogleMap = function(){ deferred.resolve() }
 
-      if (document.readyState === "complete") { loadScript() }
-      else if ($window.attachEvent) { $window.attachEvent('onload', loadScript); }
-      else { $window.addEventListener('load', loadScript, false); }
+        if (document.readyState === "complete") { loadScript() }
+        else if ($window.attachEvent) { $window.attachEvent('onload', loadScript); }
+        else { $window.addEventListener('load', loadScript, false); }
+      }
 
       return deferred.promise;
     }
