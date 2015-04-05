@@ -8,6 +8,7 @@
     .factory('Path', PathModel)
     .service('LazyLoadGoogleMap', LazyLoadGoogleMap)
     .service('GoogleMap', GoogleMap)
+    .service('MapHelper', MapHelper)
     .directive('map', mapDirective)
     .directive('polygon', polygonDirective)
     .directive('path', pathDirective)
@@ -17,11 +18,13 @@
   MapOptionsModel.$inject = ['Coordinate'];
   LazyLoadGoogleMap.$inject = ['$window', '$q', '$timeout'];
   GoogleMap.$inject = ['$q', 'LazyLoadGoogleMap', 'MapOptions'];
+  MapHelper.$inject = ['GoogleMap', 'Coordinate', '$q'];
   MapController.$inject = ['$scope', '$q', 'GoogleMap'];
   PolygonController.$inject = ['$scope', '$q'];
-  mapDirective.$inject = ['GoogleMap'];
+  mapDirective.$inject = ['GoogleMap', 'Coordinate'];
   polygonDirective.$inject = ['Polygon', '$q'];
   pathDirective.$inject = ['Coordinate'];
+
 
   function CoordinateModel(){
     function Coordinate(lat, lng){
@@ -32,6 +35,11 @@
     //(data:Object) -> :boolean
     Coordinate.validateJson = function(data){
       if(data == null) return false;
+
+      if(google != null && google.maps != null && google.maps.LatLng != null && data instanceof google.maps.LatLng){
+        data.lat = data.lat();
+        data.lng = data.lng();
+      }
 
       if(data.lat == null) return false;
       if(data.lng == null) return false;
@@ -60,7 +68,7 @@
         }
         return null;
       }
-    }
+    };
 
     return Coordinate;
   }
@@ -265,6 +273,7 @@
       } else{
         mapPromise = LazyLoadGoogleMap.load(key).then(function(){
           var opt = MapOptions.apiResponseTransformer(options).toGoogle();
+
           return new google.maps.Map(document.getElementById(id), opt);
         });
         deferred.resolve(mapPromise);
@@ -274,6 +283,41 @@
     this.$destroy = function(){
       mapPromise = null;
       deferred.reject("destroying map");
+    }
+  }
+
+  function MapHelper(GoogleMap, Coordinate, $q){
+    //[:{lat,lng}] => {lat, lng}
+    this.getCenter = function(coordinates){
+      return GoogleMap.map().then(function(){
+        var bounds = new google.maps.LatLngBounds();
+        angular.forEach(coordinates, function(coord){
+          bounds.extend(Coordinate.apiResponseTransformer(coord).toGoogle());
+        });
+        if(!bounds.isEmpty()) {
+          return Coordinate.apiResponseTransformer(bounds.getCenter());
+        } else {
+          return $q.reject("no available center")
+        }
+      });
+    }
+
+    this.offsetCenter = function(coordinate, offsetX, offsetY) {
+      return GoogleMap.map().then(function(map){
+        var deferred = $q.defer();
+        var ov = new google.maps.OverlayView();
+        ov.onAdd = function() {
+          var proj = this.getProjection();
+          var aPoint = proj.fromLatLngToContainerPixel(Coordinate.apiResponseTransformer(coordinate).toGoogle());
+          aPoint.x = aPoint.x+offsetX;
+          aPoint.y = aPoint.y+offsetY;
+
+          deferred.resolve(Coordinate.apiResponseTransformer(proj.fromContainerPixelToLatLng(aPoint)));
+        };
+        ov.draw = function() {};
+        ov.setMap(map);
+        return deferred.promise;
+      });
     }
   }
 
@@ -299,7 +343,7 @@
     }
   }
 
-  function mapDirective(GoogleMap){
+  function mapDirective(GoogleMap, Coordinate){
     var GOOGLE_MAP_ID = "mapId";
 
     return {
@@ -318,10 +362,15 @@
       controller: MapController,
       link: function($scope, element, attrs, controller){
         GoogleMap.map($scope.key, GOOGLE_MAP_ID, getMapOptions($scope)).then(function(map){
-          $scope.$watch("styles", function(newValue){
-            map.setOptions({styles: newValue});
-          });
+          //map initialized
         });
+
+        $scope.$watchGroup(["center", "styles"], function(nv){ GoogleMap.map().then(function(map){
+          var newCenter = nv[0];
+          var newStyles = nv[1];
+          map.setOptions({styles: newStyles});
+          map.panTo(Coordinate.apiResponseTransformer(newCenter).toGoogle());
+        })});
 
         $scope.$on("$destroy", function(){ GoogleMap.$destroy(); });
 
