@@ -20,7 +20,7 @@
   MapController.$inject = ['$scope', '$q', 'GoogleMap'];
   PolygonController.$inject = ['$scope', '$q'];
   mapDirective.$inject = ['GoogleMap'];
-  polygonDirective.$inject = ['Polygon'];
+  polygonDirective.$inject = ['Polygon', '$q'];
   pathDirective.$inject = ['Coordinate'];
 
   function CoordinateModel(){
@@ -137,14 +137,14 @@
       if(data == null) return false;
 
       if(data.stroke) {
-        if(data.stroke.color) data.strokeColor = data.stroke.color;
-        if(data.stroke.opacity) data.strokeOpacity = data.stroke.opacity;
-        if(data.stroke.weight) data.strokeWeight = data.stroke.weight;
+        if(data.stroke.color != null) data.strokeColor = data.stroke.color;
+        if(data.stroke.opacity != null) data.strokeOpacity = data.stroke.opacity;
+        if(data.stroke.weight != null) data.strokeWeight = data.stroke.weight;
       }
 
       if(data.fill) {
-        if(data.fill.color) data.fillColor = data.fill.color;
-        if(data.fill.opacity) data.fillOpacity = data.fill.opacity;
+        if(data.fill.color != null) data.fillColor = data.fill.color;
+        if(data.fill.opacity != null) data.fillOpacity = data.fill.opacity;
       }
       return true;
     };
@@ -344,7 +344,7 @@
     }
   }
 
-  function polygonDirective(Polygon){
+  function polygonDirective(Polygon, $q){
     return {
       restrict: 'AE',
       require: '^map',
@@ -354,7 +354,18 @@
       controller: PolygonController,
       link: function($scope, element, attr, mapController){
         $scope.$watch("options", function(newValue){
-          $scope.polygon = mapController.addPolygon(Polygon.apiResponseTransformer(newValue));
+          if($scope.polygon == null){
+            $scope.polygon = mapController.addPolygon(Polygon.apiResponseTransformer(newValue));
+          } else {
+            $scope.polygon.then(function(polygon){
+              if(newValue == null) {
+                polygon.setMap(null);
+                $scope.polygon = null;
+              } else polygon.setOptions(newValue);
+            }).catch(function(error){
+              $scope.polygon = mapController.addPolygon(Polygon.apiResponseTransformer(newValue));
+            });
+          }
         });
 
       }
