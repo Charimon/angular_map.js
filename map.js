@@ -17,8 +17,8 @@
   MapOptionsModel.$inject = ['Coordinate'];
   LazyLoadGoogleMap.$inject = ['$window', '$q', '$timeout'];
   GoogleMap.$inject = ['$q', 'LazyLoadGoogleMap', 'MapOptions'];
-  MapController.$inject = ['$scope', 'GoogleMap'];
-  PolygonController.$inject = ['$scope'];
+  MapController.$inject = ['$scope', '$q', 'GoogleMap'];
+  PolygonController.$inject = ['$scope', '$q'];
   mapDirective.$inject = ['GoogleMap'];
   polygonDirective.$inject = ['Polygon'];
   pathDirective.$inject = ['Coordinate'];
@@ -277,18 +277,26 @@
     }
   }
 
-  function MapController($scope, GoogleMap){
-    this.addPolygon = function(polygon){ return GoogleMap.map().then(function(map){
-      var mapPolygon = polygon.toGoogle();
-      mapPolygon.setMap(map);
-      return mapPolygon;
-    })};
+  function MapController($scope, $q, GoogleMap){
+    this.addPolygon = function(polygon){
+      if(polygon == null) return $q.reject("undefined polygon");
+
+      return GoogleMap.map().then(function(map){
+        var mapPolygon = polygon.toGoogle();
+        mapPolygon.setMap(map);
+        return mapPolygon;
+      });
+    };
   }
 
-  function PolygonController($scope){
-    this.setPath = function(coordinates){ $scope.polygon.then(function(polygon){
-      polygon.setPaths(coordinates.map(function(c){return c.toGoogle()}));
-    })}
+  function PolygonController($scope, $q){
+    this.setPath = function(coordinates){
+      if(coordinates == null) return $q.reject("undefined polygon");
+
+      return $scope.polygon.then(function(polygon){
+        polygon.setPaths(coordinates.map(function(c){return c.toGoogle()}));
+      });
+    }
   }
 
   function mapDirective(GoogleMap){
@@ -345,7 +353,10 @@
       },
       controller: PolygonController,
       link: function($scope, element, attr, mapController){
-        $scope.polygon = mapController.addPolygon(Polygon.apiResponseTransformer($scope.options));
+        $scope.$watch("options", function(newValue){
+          $scope.polygon = mapController.addPolygon(Polygon.apiResponseTransformer(newValue));
+        });
+
       }
     }
   }
