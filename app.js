@@ -3,6 +3,31 @@
 
   angular.module('app', ['map'])
     .controller("AppController", function(){
+      this.polygonOptions = {
+        stroke:{
+          color:'red',
+          opacity:'1',
+          weight: 1
+        },
+        fill:{
+          color:"green",
+          opacity:1
+        },
+        paths: [
+          {lat:25.774252, lng:-80.190262},
+          {lat:18.466465, lng:-66.118292},
+          {lat:32.321384, lng:-64.75737},
+          {lat:25.774252, lng:-80.190262}
+        ]
+      };
+
+      this.polygonPath = [
+        {lat:25.774252, lng:-80.190262},
+        {lat:18.466465, lng:-66.118292},
+        {lat:32.321384, lng:-64.75737},
+        {lat:25.774252, lng:-80.190262}
+      ];
+
       this.styles = [
         {
           "elementType": "geometry",
