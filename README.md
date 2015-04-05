@@ -7,5 +7,5 @@ angular version of google maps
 ```html
 <map></map
 or set values:
-<map center="{lat:47.605755, lng:-122.335955}" zoom="12" options='{draggable:false, disableDefaultUI:true}'></map
+<map center="{lat:47.605755, lng:-122.335955}" zoom="12" options='{draggable:false}'></map
 ```
