@@ -5,11 +5,13 @@
     .factory('Coordinate', CoordinateModel)
     .factory('MapOptions', MapOptionsModel)
     .factory('Polygon', PolygonModel)
+    .factory('Marker', MarkerModel)
     .factory('Path', PathModel)
     .service('LazyLoadGoogleMap', LazyLoadGoogleMap)
     .service('GoogleMap', GoogleMap)
     .service('MapHelper', MapHelper)
     .directive('map', mapDirective)
+    .directive('marker', markerDirective)
     .directive('polygon', polygonDirective)
     .directive('path', pathDirective)
     .controller('MapController', MapController)
@@ -21,8 +23,10 @@
   MapHelper.$inject = ['GoogleMap', 'Coordinate', '$q'];
   MapController.$inject = ['$scope', '$q', 'GoogleMap'];
   PolygonController.$inject = ['$scope', '$q'];
+  MarkerModel.$inject = ['Coordinate'];
   mapDirective.$inject = ['GoogleMap', 'Coordinate'];
   polygonDirective.$inject = ['Polygon', '$q'];
+  markerDirective.$inject = ['Marker', '$q'];
   pathDirective.$inject = ['Coordinate'];
 
 
@@ -237,6 +241,61 @@
     return Path;
   }
 
+  function MarkerModel(Coordinate){
+    function Marker(position, options){
+      this.position = position;
+
+      for(var prop in options){
+        if(options.hasOwnProperty(prop) && prop != 'position'){
+          this[prop] = options[prop];
+        }
+      }
+    }
+    //(d:Object) -> :Marker
+    Marker.build = function(d){ return new Marker(d.position, d) };
+
+    //(data:Object) -> :boolean
+    //mutates data
+    Marker.validateJson = function(data){
+      if(data == null) return false;
+
+      if(Coordinate.validateJson(data.position) == false) return false;
+
+      return true;
+    };
+
+    //(data:Object) -> :Marker | null
+    Marker.fromJson = function(data){
+      //data will be muted after call to validateJson
+      if(Marker.validateJson(data)){
+        return Marker.build(data);
+      }
+    };
+    //(responseData:Object) -> :Marker | :Array[Marker]
+    Marker.apiResponseTransformer = function(responseData){
+      if(angular.isArray(responseData)){
+        return responseData.map(Marker.fromJson).filter(Boolean);
+      }
+      return Marker.fromJson(responseData);
+    };
+
+    Marker.prototype = {
+      toGoogle: function(){
+        var result = {};
+        for(var prop in this){
+          if(this.hasOwnProperty(prop)){
+            if(this[prop] == null || this[prop].toGoogle == undefined) result[prop] = this[prop];
+            else result[prop] = this[prop].toGoogle();
+          }
+        }
+        return new google.maps.Marker(result);
+      }
+    };
+
+    return Marker;
+
+  }
+
   function LazyLoadGoogleMap($window, $q, $timeout){
     this.load = function(key) {
       function loadScript(){
@@ -331,6 +390,16 @@
         return mapPolygon;
       });
     };
+
+    this.addMarker = function(marker){
+      if(marker == null) return $q.reject("undefined marker");
+
+      return GoogleMap.map().then(function(map){
+        var mapMarker = marker.toGoogle();
+        mapMarker.setMap(map);
+        return mapMarker;
+      });
+    };
   }
 
   function PolygonController($scope, $q){
@@ -388,6 +457,42 @@
 
           return opt;
         }
+
+      }
+    }
+  }
+
+  function markerDirective(Marker, $q){
+    return {
+      restrict: 'AE',
+      require: '^map',
+      scope: {
+        options:'=?',
+        position:'=?'
+      },
+      link: function($scope, element, attr, mapController){
+        $scope.$watchGroup(["options", "position"], function(newValue){
+          var newOptions = newValue[0];
+          var newPosition = newValue[1];
+
+          if(newPosition != null && (newOptions == null || newOptions.position == null)) {
+            newOptions = newOptions || {};
+            newOptions.position = newPosition;
+          }
+
+          if($scope.marker == null){
+            $scope.marker = mapController.addMarker(Marker.apiResponseTransformer(newOptions));
+          } else {
+            $scope.marker.then(function(marker){
+              if(newOptions == null || newPosition == null) {
+                marker.setMap(null);
+                $scope.marker = null;
+              } else marker.setOptions(newOptions);
+            }).catch(function(error){
+              $scope.marker = mapController.addMarker(Marker.apiResponseTransformer(newOptions));
+            });
+          }
+        })
 
       }
     }
