@@ -6,6 +6,8 @@ angular version of google maps
 3. add directive
 ```html
 <map></map
-or set values:
+```
+or set your own values right away
+```html
 <map center="{lat:47.605755, lng:-122.335955}" zoom="12" options='{draggable:false}'></map
 ```
