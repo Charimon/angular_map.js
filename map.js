@@ -22,8 +22,8 @@
   MapController.$inject = ['$scope', '$q', 'GoogleMap'];
   PolygonController.$inject = ['$scope', '$q'];
   mapDirective.$inject = ['GoogleMap', 'Coordinate'];
-  polygonDirective.$inject = ['Polygon', '$q'];
-  pathDirective.$inject = ['Coordinate'];
+  polygonDirective.$inject = ['Polygon', '$q', 'GoogleMap'];
+  pathDirective.$inject = ['Coordinate', 'GoogleMap'];
 
 
   function CoordinateModel(){
@@ -369,7 +369,7 @@
           var newCenter = nv[0];
           var newStyles = nv[1];
           map.setOptions({styles: newStyles});
-          map.panTo(Coordinate.apiResponseTransformer(newCenter).toGoogle());
+          if(newCenter != null) map.panTo(Coordinate.apiResponseTransformer(newCenter).toGoogle());
         })});
 
         $scope.$on("$destroy", function(){ GoogleMap.$destroy(); });
@@ -393,7 +393,7 @@
     }
   }
 
-  function polygonDirective(Polygon, $q){
+  function polygonDirective(Polygon, $q, GoogleMap){
     return {
       restrict: 'AE',
       require: '^map',
@@ -402,7 +402,7 @@
       },
       controller: PolygonController,
       link: function($scope, element, attr, mapController){
-        $scope.$watch("options", function(newValue){
+        $scope.$watch("options", function(newValue){ GoogleMap.map().then(function(){
           if($scope.polygon == null){
             $scope.polygon = mapController.addPolygon(Polygon.apiResponseTransformer(newValue));
           } else {
@@ -415,13 +415,13 @@
               $scope.polygon = mapController.addPolygon(Polygon.apiResponseTransformer(newValue));
             });
           }
-        });
+        })})
 
       }
     }
   }
 
-  function pathDirective(Coordinate){
+  function pathDirective(Coordinate, GoogleMap){
     return {
       restrict: 'AE',
       require: ['^polygon', 'ngModel'],
@@ -431,7 +431,11 @@
       },
       link: function($scope, element, attr, requires){
         var polygonController = requires[0];
-        $scope.$watch("model", function(newValue){ polygonController.setPath(Coordinate.apiResponseTransformer(newValue)); });
+        $scope.$watch("model", function(newValue){
+          GoogleMap.map().then(function(){
+            polygonController.setPath(Coordinate.apiResponseTransformer(newValue)); });
+          });
+
       }
     }
   }
