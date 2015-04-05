@@ -22,8 +22,8 @@
   MapController.$inject = ['$scope', '$q', 'GoogleMap'];
   PolygonController.$inject = ['$scope', '$q'];
   mapDirective.$inject = ['GoogleMap', 'Coordinate'];
-  polygonDirective.$inject = ['Polygon', '$q', 'GoogleMap'];
-  pathDirective.$inject = ['Coordinate', 'GoogleMap'];
+  polygonDirective.$inject = ['Polygon', '$q'];
+  pathDirective.$inject = ['Coordinate'];
 
 
   function CoordinateModel(){
@@ -36,7 +36,7 @@
     Coordinate.validateJson = function(data){
       if(data == null) return false;
 
-      if(google != null && google.maps != null && google.maps.LatLng != null && data instanceof google.maps.LatLng){
+      if(window.google != null && window.google.maps != null && window.google.maps.LatLng != null && data instanceof window.google.maps.LatLng){
         data.lat = data.lat();
         data.lng = data.lng();
       }
@@ -63,7 +63,7 @@
 
     Coordinate.prototype = {
       toGoogle: function(){
-        if(google != null && google.maps != null && google.maps.LatLng != null){
+        if(window.google != null && window.google.maps != null && window.google.maps.LatLng != null){
           return new google.maps.LatLng(this.lat, this.lng);
         }
         return null;
@@ -393,7 +393,7 @@
     }
   }
 
-  function polygonDirective(Polygon, $q, GoogleMap){
+  function polygonDirective(Polygon, $q){
     return {
       restrict: 'AE',
       require: '^map',
@@ -402,7 +402,7 @@
       },
       controller: PolygonController,
       link: function($scope, element, attr, mapController){
-        $scope.$watch("options", function(newValue){ GoogleMap.map().then(function(){
+        $scope.$watch("options", function(newValue){
           if($scope.polygon == null){
             $scope.polygon = mapController.addPolygon(Polygon.apiResponseTransformer(newValue));
           } else {
@@ -415,13 +415,13 @@
               $scope.polygon = mapController.addPolygon(Polygon.apiResponseTransformer(newValue));
             });
           }
-        })})
+        })
 
       }
     }
   }
 
-  function pathDirective(Coordinate, GoogleMap){
+  function pathDirective(Coordinate){
     return {
       restrict: 'AE',
       require: ['^polygon', 'ngModel'],
@@ -432,9 +432,8 @@
       link: function($scope, element, attr, requires){
         var polygonController = requires[0];
         $scope.$watch("model", function(newValue){
-          GoogleMap.map().then(function(){
-            polygonController.setPath(Coordinate.apiResponseTransformer(newValue)); });
-          });
+          polygonController.setPath(Coordinate.apiResponseTransformer(newValue));
+        });
 
       }
     }
