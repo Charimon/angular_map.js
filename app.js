@@ -2,7 +2,8 @@
   'use strict';
 
   angular.module('app', ['map'])
-    .controller("AppController", function(){
+    .controller("AppController", function($timeout){
+      var self = this;
       this.polygonOptions = {
         stroke:{
           color:'red',
@@ -20,12 +21,17 @@
         ]
       };
 
+      $timeout(function(){
+        self.center = {lat: 10, lng: 0};
+
+      }, 5000);
+
       this.polygonPath = [
         {lat:0, lng:0},
         {lat:0, lng:10},
         {lat:10, lng:10},
         {lat:10, lng:0}
-      ]
+      ];
 
       this.styles = [
         {

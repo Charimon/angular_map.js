@@ -24,7 +24,7 @@
   MapController.$inject = ['$scope', '$q', 'GoogleMap'];
   PolygonController.$inject = ['$scope', '$q'];
   MarkerModel.$inject = ['Coordinate'];
-  mapDirective.$inject = ['GoogleMap', 'Coordinate'];
+  mapDirective.$inject = ['GoogleMap', 'Coordinate', 'MapOptions'];
   polygonDirective.$inject = ['Polygon', '$q'];
   markerDirective.$inject = ['Marker', '$q'];
   pathDirective.$inject = ['Coordinate'];
@@ -71,6 +71,9 @@
           return new google.maps.LatLng(this.lat, this.lng);
         }
         return null;
+      },
+      toJson: function(){
+        return {lat:this.lat, lng:this.lng};
       }
     };
 
@@ -120,7 +123,7 @@
       toGoogle: function(){
         var result = {}
         for(var prop in this){
-          if(this.hasOwnProperty(prop)){
+          if(this.hasOwnProperty(prop) && prop != "center"){
             if(this[prop] == null || this[prop].toGoogle == undefined) result[prop] = this[prop];
             else result[prop] = this[prop].toGoogle();
           }
@@ -331,7 +334,9 @@
         return deferred.promise;
       } else{
         mapPromise = LazyLoadGoogleMap.load(key).then(function(){
-          var opt = MapOptions.apiResponseTransformer(options).toGoogle();
+
+          var opt = MapOptions.apiResponseTransformer(options);
+          if(opt) opt = opt.toGoogle();
 
           return new google.maps.Map(document.getElementById(id), opt);
         });
@@ -412,8 +417,9 @@
     }
   }
 
-  function mapDirective(GoogleMap, Coordinate){
+  function mapDirective(GoogleMap, Coordinate, MapOptions){
     var GOOGLE_MAP_ID = "mapId";
+    var processCenterChanged = true;
 
     return {
       template: "<div class='map' style='height:100%'>" +
@@ -422,8 +428,8 @@
         "</div>",
       scope: {
         key:'@',
-        zoom:'=',
-        center:'=',
+        zoom:'=?',
+        center:'=?',
         styles:'=',
         options:'=?'
       },
@@ -431,14 +437,28 @@
       controller: MapController,
       link: function($scope, element, attrs, controller){
         GoogleMap.map($scope.key, GOOGLE_MAP_ID, getMapOptions($scope)).then(function(map){
-          //map initialized
+          google.maps.event.addListener(map, 'bounds_changed', function(){
+//            $scope.center = Coordinate.apiResponseTransformer(map.getCenter()).toJson();
+            $scope.zoom = map.getZoom();
+            if($scope.center != null) {
+              console.log("newCenter: " + $scope.center.lat + ", " + $scope.center.lng);
+            } else {
+              console.log("no newCenter");
+            }
+          });
         });
 
-        $scope.$watchGroup(["center", "styles"], function(nv){ GoogleMap.map().then(function(map){
-          var newCenter = nv[0];
-          var newStyles = nv[1];
-          map.setOptions({styles: newStyles});
-          if(newCenter != null) map.panTo(Coordinate.apiResponseTransformer(newCenter).toGoogle());
+        $scope.$watchGroup(["center", "zoom", "styles", "options"], function(nv,ov){ GoogleMap.map().then(function(map){
+          var center = null;
+
+          var opts = MapOptions.apiResponseTransformer({center: nv[0], zoom: nv[1], styles:nv[2], options:nv[3]});
+          if(opts){
+            center = opts.center != null? opts.center.toGoogle(): null;
+            opts = opts.toGoogle();
+          }
+
+          map.setOptions(opts);
+          if(center != null) map.panTo(center);
         })});
 
         $scope.$on("$destroy", function(){ GoogleMap.$destroy(); });
@@ -446,9 +466,11 @@
         function getMapOptions($scope) {
           var opt = {};
           if($scope.zoom) opt.zoom = $scope.zoom;
-          else opt.zoom = 3;
+          else $scope.zoom = 3;
+
           if($scope.center) opt.center = $scope.center;
-          else opt.center = {lat:0, lng: 0}
+          else $scope.center = {lat:0, lng: 0};
+
           if($scope.styles) opt.styles = $scope.styles;
 
           for(var prop in $scope.options){
@@ -492,7 +514,7 @@
               $scope.marker = mapController.addMarker(Marker.apiResponseTransformer(newOptions));
             });
           }
-        })
+        });
 
       }
     }

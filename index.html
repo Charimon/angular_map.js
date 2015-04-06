@@ -7,7 +7,7 @@
   </head>
   <body ng-controller="AppController as app">
     <!-- <map center='{lat:47.605755, lng:-122.335955}' options='{draggable:false, disableDefaultUI:true}' zoom="12" styles='app.styles'></map> -->
-    <map>
+    <map center="app.center" zoom="5">
       <polygon options="app.polygonOptions"></polygon>
 
       <!--<polygon options="app.polygonOptions">-->
