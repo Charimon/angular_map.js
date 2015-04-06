@@ -2,8 +2,9 @@
   'use strict';
 
   angular.module('app', ['map'])
-    .controller("AppController", function($timeout){
+    .controller("AppController", function($timeout, $scope){
       var self = this;
+      this.center = {lat: 0, lng: 0};
       this.polygonOptions = {
         stroke:{
           color:'red',
@@ -21,10 +22,10 @@
         ]
       };
 
-      $timeout(function(){
-        self.center = {lat: 10, lng: 0};
-
-      }, 5000);
+      $scope.$watch("center", function(nv, ov){
+        if(nv != null && nv.lat != null && nv.lng != null) console.log("new center : " + nv.lat + ", " + nv.lng);
+        else  console.log("new center but is null");
+      });
 
       this.polygonPath = [
         {lat:0, lng:0},
