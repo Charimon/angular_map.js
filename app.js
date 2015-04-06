@@ -27,6 +27,15 @@
         else  console.log("new center but is null");
       });
 
+      $timeout(function(){
+        self.polygonPath = [
+          {lat:0, lng:0},
+          {lat:0, lng:100},
+          {lat:100, lng:100},
+          {lat:100, lng:0}
+        ];
+      }, 5000);
+
       this.polygonPath = [
         {lat:0, lng:0},
         {lat:0, lng:10},

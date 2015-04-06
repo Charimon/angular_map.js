@@ -24,8 +24,8 @@
   LazyLoadGoogleMap.$inject = ['$window', '$q', '$timeout'];
   GoogleMap.$inject = ['$q', 'LazyLoadGoogleMap', 'MapOptions'];
   MapHelper.$inject = ['GoogleMap', 'Coordinate', '$q'];
-  MapController.$inject = ['$scope', '$q', 'GoogleMap'];
-  PolygonController.$inject = ['$scope', '$q'];
+  MapController.$inject = ['$scope', '$q', 'GoogleMap', 'Marker', 'Polygon'];
+  PolygonController.$inject = ['$scope', '$q', 'Coordinate'];
   CoordinateModel.$inject = ['$q'];
   MarkerModel.$inject = ['Coordinate', '$q'];
   PolygonModel.$inject = ['$q'];
@@ -309,36 +309,35 @@
     }
   }
 
-  function MapController($scope, $q, GoogleMap){
+  function MapController($scope, $q, GoogleMap, Marker, Polygon){
+    //(polygon:Object) -> Promise(:google.maps.Polygon)
     this.addPolygon = function(polygon){
-      if(polygon == null) return $q.reject("undefined polygon");
-
-      return GoogleMap.map().then(function(map){
-        var mapPolygon = polygon.toGoogle();
-        mapPolygon.setMap(map);
-        return mapPolygon;
+      return Polygon.promiseFrom(polygon).then(function(polygon){
+        return GoogleMap.map().then(function(map){
+          var mapPolygon = polygon.toGoogle();
+          mapPolygon.setMap(map);
+          return mapPolygon;
+        });
       });
     };
 
     this.addMarker = function(marker){
-      if(marker == null) return $q.reject("undefined marker");
-
       return GoogleMap.map().then(function(map){
-        var mapMarker = marker.toGoogle();
-        mapMarker.setMap(map);
-        return mapMarker;
+        return Marker.promiseFrom(marker).then(function(marker){
+          var mapMarker = marker.toGoogle();
+          mapMarker.setMap(map);
+          return mapMarker;
+        });
       });
     };
   }
 
-  function PolygonController($scope, $q){
-    this.setPath = function(coordinates){
-      if(coordinates == null) return $q.reject("undefined polygon");
-
-      return $scope.polygon.then(function(polygon){
+  function PolygonController($scope, $q, Coordinate){
+    this.setPath = function(coordinates){ return Coordinate.promiseFrom(coordinates).then(function(coordinates){
+      return $scope.polygonPromise.then(function(polygon){
         polygon.setPaths(coordinates.map(function(c){return c.toGoogle()}));
       });
-    }
+    })};
   }
 
   function mapDirective(GoogleMap, Coordinate, MapOptions, $timeout){
@@ -368,10 +367,7 @@
 
               $timeout.cancel($scope.centerChangedPromise);
               $scope.centerChangedPromise = $timeout(function(){
-                Coordinate.promiseFrom(map.getCenter()).then(function(coordinate){
-                  $scope.center = coordinate.toJson();
-                });
-
+                Coordinate.promiseFrom(map.getCenter()).then(function(coordinate){$scope.center = coordinate.toJson(); });
                 $scope.zoom = map.getZoom();
               }, 200);
             });
@@ -380,9 +376,7 @@
 
         $scope.$watchGroup(["center", "zoom", "styles", "options"], function(nv,ov){ GoogleMap.map().then(function(map){
           var data = {center:nv[0], zoom:nv[1], styles:nv[2], options:nv[3]};
-          MapOptions.promiseFrom(data).then(function(options){
-            options.fillMap(map)
-          });
+          MapOptions.promiseFrom(data).then(function(options){ options.fillMap(map); });
         })});
 
         $scope.$on("$destroy", function(){ GoogleMap.$destroy(); });
@@ -409,22 +403,16 @@
             newOptions.position = newPosition;
           }
 
-          if($scope.marker == null){
-            Marker.promiseFrom(newOptions).then(function(marker){
-              $scope.marker = mapController.addMarker(marker);
-            });
-          } else {
-            $scope.marker.then(function(marker){
-              if(newOptions == null || newPosition == null) {
-                marker.setMap(null);
-                $scope.marker = null;
-              } else marker.setOptions(newOptions);
-            }).catch(function(error){
-              Marker.promiseFrom(newOptions).then(function(marker){
-                $scope.marker = mapController.addMarker(marker);
-              });
+          if($scope.markerPromise == null) $scope.markerPromise = mapController.addMarker(newValue);
+          else {
+            $scope.markerPromise.then(function(polygon){
+              polygon.setMap(null);
+              $scope.markerPromise = mapController.addMarker(newValue);
+            }, function(){
+              $scope.markerPromise = mapController.addMarker(newValue);
             });
           }
+
         });
 
       }
@@ -441,20 +429,13 @@
       controller: PolygonController,
       link: function($scope, element, attr, mapController){
         $scope.$watch("options", function(newValue){
-          if($scope.polygon == null){
-            Polygon.promiseFrom(newValue).then(function(polygon){
-              $scope.polygon = mapController.addPolygon(polygon);
-            });
-          } else {
-            $scope.polygon.then(function(polygon){
-              if(newValue == null) {
-                polygon.setMap(null);
-                $scope.polygon = null;
-              } else polygon.setOptions(newValue);
-            }).catch(function(error){
-              Polygon.promiseFrom(newValue).then(function(polygon){
-                $scope.polygon = mapController.addPolygon(polygon);
-              });
+          if($scope.polygonPromise == null) $scope.polygonPromise = mapController.addPolygon(newValue);
+          else {
+            $scope.polygonPromise.then(function(polygon){
+              polygon.setMap(null);
+              $scope.polygonPromise = mapController.addPolygon(newValue);
+            }, function(error){
+              $scope.polygonPromise = mapController.addPolygon(newValue);
             });
           }
         })
@@ -474,9 +455,7 @@
       link: function($scope, element, attr, requires){
         var polygonController = requires[0];
         $scope.$watch("model", function(newValue){
-          Coordinate.promiseFrom(newValue).then(function(coordinate){
-            polygonController.setPath(coordinate);
-          });
+          polygonController.setPath(newValue)
         });
 
       }
