@@ -2,7 +2,7 @@
   'use strict';
 
   angular.module('app', ['map'])
-    .controller("AppController", function($timeout, $scope){
+    .controller("AppController", function($timeout, $scope, $http){
       var self = this;
       this.center = {lat: 0, lng: 0};
       this.polygonOptions = {
@@ -41,6 +41,15 @@
         {"featureType": "transit.line", "stylers": [{ "visibility": "off" }]}
       ];
 
+      this.loadPolygons = function(){
+        $http.get("seattle_hoods.geo.json").then(function(responseData){
+          return responseData.data.features.slice(0, 100);
+        }).then(function(features){
+          self.features = features;
+        });
+      };
+
+      $timeout(this.loadPolygons, 1000);
     });
 
 

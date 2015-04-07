@@ -46,23 +46,26 @@
 
 	'use strict';
 	__webpack_require__(1);
+	__webpack_require__(2);
 
-	angular.module('map', ['map.models'])
+	angular.module('map', ['map.models', 'map.services'])
 	  .directive('map', mapDirective)
 	  .directive('marker', markerDirective)
 	  .directive('polygon', polygonDirective)
 	  .directive('path', pathDirective)
+	  .directive('feature', featureDirective)
 	  .controller('MapController', MapController)
 	  .controller('PolygonController', PolygonController);
 
-	MapController.$inject = ['$scope', '$q', 'GoogleMap', 'Marker', 'Polygon'];
+	MapController.$inject = ['$scope', '$q', 'GoogleMap', 'Marker', 'Polygon', 'Feature'];
 	PolygonController.$inject = ['$scope', '$q', 'Coordinate'];
 	mapDirective.$inject = ['GoogleMap', 'Coordinate', 'MapOptions', '$timeout'];
 	polygonDirective.$inject = ['Polygon', '$q'];
 	markerDirective.$inject = ['Marker', '$q'];
 	pathDirective.$inject = ['Coordinate'];
+	featureDirective.$inject = ['$timeout'];
 
-	function MapController($scope, $q, GoogleMap, Marker, Polygon){
+	function MapController($scope, $q, GoogleMap, Marker, Polygon, Feature){
 	  //(polygon:Object) -> Promise(:google.maps.Polygon)
 	  this.addPolygon = function(polygon){
 	    return Polygon.promiseFrom(polygon).then(function(polygon){
@@ -73,7 +76,6 @@
 	      });
 	    });
 	  };
-
 	  //(marker:Object) -> Promise(:google.maps.Marker)
 	  this.addMarker = function(marker){
 	    return GoogleMap.map().then(function(map){
@@ -81,6 +83,16 @@
 	        var mapMarker = marker.toGoogle();
 	        mapMarker.setMap(map);
 	        return mapMarker;
+	      });
+	    });
+	  };
+	  //(feature:Object) -> Promise()
+	  this.addFeature = function(feature){
+	    return GoogleMap.map().then(function(map){
+	      return Feature.promiseFrom(feature).then(function(feature){
+	//        var mapMarker = marker.toGoogle();
+	//        mapMarker.setMap(map);
+	//        return mapMarker;
 	      });
 	    });
 	  };
@@ -204,6 +216,32 @@
 	    }
 	  }
 	}
+	function featureDirective($timeout){
+	  return {
+	    restrict: 'AE',
+	    require: '^map',
+	    scope: {
+	      model:'=model'
+	    },
+	    link: function($scope, element, attr, mapController){
+	      $scope.$watch("model", function(nv){
+	        mapController.addFeature(nv);
+
+
+	//        if($scope.featurePromise == null) $scope.featurePromise = mapController.addMarker(data);
+	//        else {
+	//          $scope.featurePromise.then(function(polygon){
+	//            polygon.setMap(null);
+	//            $scope.markerPromise = mapController.addMarker(data);
+	//          }, function(){
+	//            $scope.markerPromise = mapController.addMarker(data);
+	//          });
+	//        }
+
+	      });
+	    }
+	  }
+	}
 
 
 /***/ },
@@ -221,18 +259,276 @@
 	    .factory('Coordinate', CoordinateModel)
 	    .factory('MapOptions', MapOptionsModel)
 	    .factory('Polygon', PolygonModel)
+	    .factory('MultiPolygon', MultiPolygonModel)
 	    .factory('Marker', MarkerModel)
+	    .factory('Feature', FeatureModel);
+
+	  MapOptionsModel.$inject = ['Coordinate', '$q'];
+	  CoordinateModel.$inject = ['$q'];
+	  MarkerModel.$inject = ['Coordinate', '$q'];
+	  PolygonModel.$inject = ['$q', 'Coordinate'];
+	  MultiPolygonModel.$inject = ['$q'];
+	  FeatureModel.$inject = ['$q', 'Coordinate', 'Polygon', 'MultiPolygon', 'Marker'];
+
+	  function MapOptionsModel(Coordinate, $q){
+	    function MapOptions(zoom, center, styles, rest){
+	      this.zoom = zoom;
+	      this.center = center;
+	      this.styles = styles;
+
+	      for(var prop in rest){
+	        if(rest.hasOwnProperty(prop) && prop != 'zoom' && prop != 'center' && prop != 'styles'){
+	          this[prop] = rest[prop];
+	        }
+	      }
+	    }
+
+	    //(data:Object) -> :Promise(:MapOptions|[:MapOptions])
+	    MapOptions.promiseFrom = function(data) { return $q(function(resolve, reject) {
+	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      else if(data instanceof MapOptions) { resolve(data); }
+	      else if(window.google != null && window.google.maps != null && window.google.maps.MapOptions != null && data instanceof window.google.maps.MapOptions) { reject("data can't be parsed correctly is of type google.maps.MapOptions"); }
+	      else if(angular.isArray(data)) { resolve($q.all(data.map(MapOptions.promiseFrom))); }
+	      else if(angular.isObject(data)) {
+	        resolve(Coordinate.promiseFrom(data.center).then(function(coordinate){
+	          if(data != null && (angular.isNumber(data.zoom) || angular.isString(data.zoom))){
+	            return $q.when(new MapOptions(data.zoom, coordinate, data.styles, data.options));
+	          } else {
+	            return $q.reject("data can't be parsed correctly");
+	          }
+	        }));
+	      }
+	      else { reject("data can't be parsed correctly"); }
+	    })};
+
+	    MapOptions.prototype = {
+	      toGoogle: function(){
+	        var result = {}
+	        for(var prop in this){
+	          if(this.hasOwnProperty(prop) && prop != "center"){
+	            if(this[prop] == null || this[prop].toGoogle == undefined) result[prop] = this[prop];
+	            else result[prop] = this[prop].toGoogle();
+	          }
+	        }
+	        return result;
+	      },
+	      //(map:google.maps.Map)
+	      fillMap: function(map){
+	        map.setOptions(this.toGoogle());
+
+	        if(map.getCenter != null && map.getCenter() != null && !map.getCenter().equals(this.center.toGoogle())){
+	          map.panTo(this.center.toGoogle());
+	        } else if( map.getCenter != null ||  map.getCenter() != null ){
+	          map.setCenter(this.center.toGoogle());
+	        }
+	      }
+
+	    };
+
+	    return MapOptions;
+	  }
+	  function CoordinateModel($q){
+	    function Coordinate(lat, lng){
+	      this.lat = lat;
+	      this.lng = lng;
+	    }
+
+	    //(data:Object) -> :Promise(:Coordinate|[:Coordinate])
+	    Coordinate.promiseFrom = function(data) { return $q(function(resolve, reject) {
+	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      else if(data instanceof Coordinate){ resolve(data); }
+	      else if(window.google != null && window.google.maps != null && window.google.maps.LatLng != null && data instanceof window.google.maps.LatLng) { resolve(new Coordinate(data.lat(), data.lng())); }
+	      else if(angular.isArray(data) && data.length == 2 && angular.isNumber(data[0]) && angular.isNumber(data[1])) { resolve(new Coordinate(data[1], data[0])); }
+	      else if(angular.isArray(data)) { resolve($q.all(data.map(Coordinate.promiseFrom))); }
+	      else if(angular.isObject(data) && (angular.isNumber(data.lat) || angular.isString(data.lat)) && (angular.isNumber(data.lng) || angular.isString(data.lng))){ resolve(new Coordinate(data.lat, data.lng)); }
+	      else { reject("data can't be parsed correctly"); }
+	    })};
+
+	    Coordinate.prototype = {
+	      toGoogle: function(){
+	        if(window.google != null && window.google.maps != null && window.google.maps.LatLng != null){
+	          return new google.maps.LatLng(this.lat, this.lng);
+	        }
+	        return null;
+	      },
+	      toJson: function(){
+	        return {lat:this.lat, lng:this.lng};
+	      }
+	    };
+
+	    return Coordinate;
+	  }
+	  function PolygonModel($q, Coordinate){
+	    function Polygon(options){
+	      for(var prop in options){
+	        if(options.hasOwnProperty(prop) && prop != "fill" && prop != "stroke"){
+	          this[prop] = options[prop];
+	        } else if(prop == "fill" && options[prop] != null){
+	          for(var subProp in options[prop]){
+	            if(options[prop].hasOwnProperty(subProp)){
+	              this[prop + subProp.capitalize()] = options[prop][subProp];
+	            }
+	          }
+	        } else if(prop == "stroke" && options[prop] != null){
+	          for(var subProp in options[prop]){
+	            if(options[prop].hasOwnProperty(subProp)){
+	              this[prop + subProp.capitalize()] = options[prop][subProp];
+	            }
+	          }
+	        }
+	      }
+	    }
+
+	    //(data:Object) -> :Promise(:Polygon|[:Polygon])
+	    Polygon.promiseFrom = function(data) { return $q(function(resolve, reject) {
+	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      else if (data instanceof Polygon) { resolve(data); }
+	      else if (window.google != null && window.google.maps != null && window.google.maps.Polygon != null && data instanceof window.google.maps.Polygon) { reject("data can't be parsed correctly of type google.maps.Polygon"); }
+	      else if (angular.isArray(data)) { resolve($q.all(data.map(Polygon.promiseFrom))); }
+	      else if (angular.isObject(data) && angular.isArray(data.coordinates) && data.type == "Polygon") {
+	        resolve(Coordinate.promiseFrom(data.coordinates).then(function(paths){ new Polygon({paths: paths}); }));
+	      }
+	      else if (angular.isObject(data)) { resolve(new Polygon(data)); }
+	      else { reject("data can't be parsed correctly"); }
+	    })};
+
+	    Polygon.prototype = {
+	      toGoogle: function(){
+	        var result = {};
+	        for(var prop in this){
+	          if(this.hasOwnProperty(prop)){
+	            if(this[prop] == null || this[prop].toGoogle == undefined) result[prop] = this[prop];
+	            else result[prop] = this[prop].toGoogle();
+	          }
+	        }
+	        return new google.maps.Polygon(result);
+	      }
+	    };
+
+	    return Polygon;
+	  }
+	  function MultiPolygonModel($q){
+	    function MultiPolygonModel(options){
+	      for(var prop in options){
+	        if(options.hasOwnProperty(prop) && prop != "fill" && prop != "stroke"){
+	          this[prop] = options[prop];
+	        } else if(prop == "fill" && options[prop] != null){
+	          for(var subProp in options[prop]){
+	            if(options[prop].hasOwnProperty(subProp)){
+	              this[prop + subProp.capitalize()] = options[prop][subProp];
+	            }
+	          }
+	        } else if(prop == "stroke" && options[prop] != null){
+	          for(var subProp in options[prop]){
+	            if(options[prop].hasOwnProperty(subProp)){
+	              this[prop + subProp.capitalize()] = options[prop][subProp];
+	            }
+	          }
+	        }
+	      }
+	    }
+
+	    //(data:Object) -> :Promise(:MultiPolygonModel|[:MultiPolygonModel])
+	    MultiPolygonModel.promiseFrom = function(data) { return $q(function(resolve, reject) {
+	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      else if (data instanceof MultiPolygonModel) { resolve(data); }
+	      else if (angular.isArray(data)){ resolve($q.all(data.map(MultiPolygonModel.promiseFrom))); }
+	      else if (angular.isObject(data)) { resolve(new MultiPolygonModel(data)); }
+	      else { reject("data can't be parsed correctly"); }
+	    })};
+
+	    MultiPolygonModel.prototype = {
+	    };
+
+	    return MultiPolygonModel;
+	  }
+	  function MarkerModel(Coordinate, $q){
+	    function Marker(position, options){
+	      this.position = position;
+
+	      for(var prop in options){
+	        if(options.hasOwnProperty(prop) && prop != 'position'){
+	          this[prop] = options[prop];
+	        }
+	      }
+	    }
+
+	    //(data:Object) -> :Promise(:Marker|[:Marker])
+	    Marker.promiseFrom = function(data) { return $q(function(resolve, reject){
+	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      else if(data instanceof Marker){ resolve(data); }
+	      else if(window.google != null && window.google.maps != null && window.google.maps.Marker != null && data instanceof window.google.maps.Marker) { reject("data can't be parsed correctly of type google.maps.Marker"); }
+	      else if(angular.isArray(data)) { resolve($q.all(data.map(Marker.promiseFrom))); }
+	      else if(angular.isObject(data)){
+	        resolve(Coordinate.promiseFrom(data.position).then(function(coordinate){ return new Marker(coordinate, data); }));
+	      } else { reject("data can't be parsed correctly"); }
+	    })};
+
+	    Marker.prototype = {
+	      toGoogle: function(){
+	        var result = {};
+	        for(var prop in this){
+	          if(this.hasOwnProperty(prop)){
+	            if(this[prop] == null || this[prop].toGoogle == undefined) result[prop] = this[prop];
+	            else result[prop] = this[prop].toGoogle();
+	          }
+	        }
+	        return new google.maps.Marker(result);
+	      }
+	    };
+
+	    return Marker;
+
+	  }
+	  function FeatureModel($q, Coordinate, Polygon, MultiPolygon, Marker){
+	    function Feature(geometry, properties){
+	      this.geometry = geometry;
+	      this.properties = properties;
+	    }
+
+	    //(data:Object) -> :Promise(:Feature|[:Feature])
+	    Feature.promiseFrom = function(data) { return $q(function(resolve, reject){
+	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      else if(data instanceof Feature){ resolve(data); }
+	      else if(angular.isArray(data)) { resolve($q.all(data.map(Feature.promiseFrom))); }
+	      else if(angular.isObject(data) && data.type == "Feature" && angular.isObject(data.geometry) && angular.isObject(data.properties)){
+	        if(data.geometry.type == "Polygon"){
+	          resolve(Polygon.promiseFrom(data.geometry).then(function(polygon){ return new Feature(polygon, data.properties)}));
+	        } else if(data.geometry.type == "MultiPolygon"){
+	          resolve(MultiPolygon.promiseFrom(data.geometry).then(function(multiPolygon){ return new Feature(multiPolygon, data.properties)}))
+	        } else {
+	          reject("data can't be parsed correctly");
+	        }
+	      } else {
+	        reject("data can't be parsed correctly");
+	      }
+	    })};
+
+	    return Feature;
+
+	  }
+	})();
+
+
+/***/ },
+/* 2 */
+/***/ function(module, exports, __webpack_require__) {
+
+	(function(){
+	  'use strict';
+
+	  String.prototype.capitalize = function() {
+	    return this.charAt(0).toUpperCase() + this.slice(1);
+	  };
+
+	  angular.module('map.services', [])
 	    .service('LazyLoadGoogleMap', LazyLoadGoogleMap)
 	    .service('GoogleMap', GoogleMap)
 	    .service('MapHelper', MapHelper);
 
-	  MapOptionsModel.$inject = ['Coordinate', '$q'];
 	  LazyLoadGoogleMap.$inject = ['$window', '$q', '$timeout'];
 	  GoogleMap.$inject = ['$q', 'LazyLoadGoogleMap', 'MapOptions'];
 	  MapHelper.$inject = ['GoogleMap', 'Coordinate', '$q'];
-	  CoordinateModel.$inject = ['$q'];
-	  MarkerModel.$inject = ['Coordinate', '$q'];
-	  PolygonModel.$inject = ['$q'];
 
 
 	  function LazyLoadGoogleMap($window, $q, $timeout){
@@ -280,196 +576,6 @@
 	      mapPromise = null;
 	      deferred.reject("destroying map");
 	    }
-	  }
-	  function MapOptionsModel(Coordinate, $q){
-	    function MapOptions(zoom, center, styles, rest){
-	      this.zoom = zoom;
-	      this.center = center;
-	      this.styles = styles;
-
-	      for(var prop in rest){
-	        if(rest.hasOwnProperty(prop) && prop != 'zoom' && prop != 'center' && prop != 'styles'){
-	          this[prop] = rest[prop];
-	        }
-	      }
-	    }
-
-	    //(data:Object) -> :Promise(:MapOptions|[:MapOptions])
-	    MapOptions.promiseFrom = function(data) {
-	      if(data instanceof MapOptions) {
-	        return $q.when(data);
-	      } else if(window.google != null && window.google.maps != null && window.google.maps.MapOptions != null && data instanceof window.google.maps.MapOptions) {
-	        return $q.reject("data can't be parsed correctly is of type google.maps.MapOptions");
-	      } else if(angular.isArray(data)) {
-	        return $q.all(data.map(MapOptions.promiseFrom));
-	      } else if(data != null) {
-	        return Coordinate.promiseFrom(data.center).then(function(coordinate){
-	          if(data != null && (angular.isNumber(data.zoom) || angular.isString(data.zoom))){
-	            return $q.when(new MapOptions(data.zoom, coordinate, data.styles, data.options));
-	          } else {
-	            return $q.reject("data can't be parsed correctly");
-	          }
-	        });
-	      } else {
-	        return $q.reject("data can't be parsed correctly");
-	      }
-	    };
-
-	    MapOptions.prototype = {
-	      toGoogle: function(){
-	        var result = {}
-	        for(var prop in this){
-	          if(this.hasOwnProperty(prop) && prop != "center"){
-	            if(this[prop] == null || this[prop].toGoogle == undefined) result[prop] = this[prop];
-	            else result[prop] = this[prop].toGoogle();
-	          }
-	        }
-	        return result;
-	      },
-	      //(map:google.maps.Map)
-	      fillMap: function(map){
-	        map.setOptions(this.toGoogle());
-
-	        if(map.getCenter != null && map.getCenter() != null && !map.getCenter().equals(this.center.toGoogle())){
-	          map.panTo(this.center.toGoogle());
-	        } else if( map.getCenter != null ||  map.getCenter() != null ){
-	          map.setCenter(this.center.toGoogle());
-	        }
-	      }
-
-	    };
-
-	    return MapOptions;
-	  }
-	  function CoordinateModel($q){
-	    function Coordinate(lat, lng){
-	      this.lat = lat;
-	      this.lng = lng;
-	    }
-
-	    //(data:Object) -> :Promise(:Coordinate|[:Coordinate])
-	    Coordinate.promiseFrom = function(data) {
-	      if(data instanceof Coordinate){
-	        return $q.when(data);
-	      } else if(window.google != null && window.google.maps != null && window.google.maps.LatLng != null && data instanceof window.google.maps.LatLng) {
-	        return $q.when(new Coordinate(data.lat(), data.lng()));
-	      } else if(angular.isArray(data)) {
-	        return $q.all(data.map(Coordinate.promiseFrom))
-	      } else if( data != null && (angular.isNumber(data.lat) || angular.isString(data.lat)) && (angular.isNumber(data.lng) || angular.isString(data.lng))){
-	        return $q.when(new Coordinate(data.lat, data.lng));
-	      } else {
-	        return $q.reject("data can't be parsed correctly");
-	      }
-	    };
-
-	    Coordinate.prototype = {
-	      toGoogle: function(){
-	        if(window.google != null && window.google.maps != null && window.google.maps.LatLng != null){
-	          return new google.maps.LatLng(this.lat, this.lng);
-	        }
-	        return null;
-	      },
-	      toJson: function(){
-	        return {lat:this.lat, lng:this.lng};
-	      }
-	    };
-
-	    return Coordinate;
-	  }
-	  function PolygonModel($q){
-	    function Polygon(options){
-	      for(var prop in options){
-	        if(options.hasOwnProperty(prop) && prop != "fill" && prop != "stroke"){
-	          this[prop] = options[prop];
-	        } else if(prop == "fill" && options[prop] != null){
-	          for(var subProp in options[prop]){
-	            if(options[prop].hasOwnProperty(subProp)){
-	              this[prop + subProp.capitalize()] = options[prop][subProp];
-	            }
-	          }
-	        } else if(prop == "stroke" && options[prop] != null){
-	          for(var subProp in options[prop]){
-	            if(options[prop].hasOwnProperty(subProp)){
-	              this[prop + subProp.capitalize()] = options[prop][subProp];
-	            }
-	          }
-	        }
-	      }
-	    }
-
-	    //(data:Object) -> :Promise(:Polygon|[:Polygon])
-	    Polygon.promiseFrom = function(data) {
-	      if(data instanceof Polygon){
-	        return $q.when(data);
-	      } else if(window.google != null && window.google.maps != null && window.google.maps.Polygon != null && data instanceof window.google.maps.Polygon) {
-	        return $q.reject("data can't be parsed correctly of type google.maps.Polygon");
-	      } else if(angular.isArray(data)) {
-	        return $q.all(data.map(Polygon.promiseFrom))
-	      } else if(data != null){
-	        return $q.when(new Polygon(data));
-	      } else {
-	        return $q.reject("data can't be parsed correctly");
-	      }
-	    };
-
-	    Polygon.prototype = {
-	      toGoogle: function(){
-	        var result = {};
-	        for(var prop in this){
-	          if(this.hasOwnProperty(prop)){
-	            if(this[prop] == null || this[prop].toGoogle == undefined) result[prop] = this[prop];
-	            else result[prop] = this[prop].toGoogle();
-	          }
-	        }
-	        return new google.maps.Polygon(result);
-	      }
-	    };
-
-	    return Polygon;
-	  }
-	  function MarkerModel(Coordinate, $q){
-	    function Marker(position, options){
-	      this.position = position;
-
-	      for(var prop in options){
-	        if(options.hasOwnProperty(prop) && prop != 'position'){
-	          this[prop] = options[prop];
-	        }
-	      }
-	    }
-
-	    //(data:Object) -> :Promise(:Marker|[:Marker])
-	    Marker.promiseFrom = function(data) {
-	      if(data instanceof Marker){
-	        return $q.when(data);
-	      } else if(window.google != null && window.google.maps != null && window.google.maps.Marker != null && data instanceof window.google.maps.Marker) {
-	        return $q.reject("data can't be parsed correctly of type google.maps.Marker");
-	      } else if(angular.isArray(data)) {
-	        return $q.all(data.map(Marker.promiseFrom))
-	      } else if(data != null){
-	        return Coordinate.promiseFrom(data.position).then(function(coordinate){
-	          return new Marker(coordinate, data);
-	        });
-	      } else {
-	        return $q.reject("data can't be parsed correctly");
-	      }
-	    };
-
-	    Marker.prototype = {
-	      toGoogle: function(){
-	        var result = {};
-	        for(var prop in this){
-	          if(this.hasOwnProperty(prop)){
-	            if(this[prop] == null || this[prop].toGoogle == undefined) result[prop] = this[prop];
-	            else result[prop] = this[prop].toGoogle();
-	          }
-	        }
-	        return new google.maps.Marker(result);
-	      }
-	    };
-
-	    return Marker;
-
 	  }
 
 	  function MapHelper(GoogleMap, Coordinate, $q){
