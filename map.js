@@ -129,7 +129,12 @@
       //(map:google.maps.Map)
       fillMap: function(map){
         map.setOptions(this.toGoogle());
-        if(this.center != null) map.panTo(this.center.toGoogle());
+
+        if(map.getCenter != null && map.getCenter() != null && !map.getCenter().equals(this.center.toGoogle())){
+          map.panTo(this.center.toGoogle());
+        } else if( map.getCenter != null ||  map.getCenter() != null ){
+          map.setCenter(this.center.toGoogle());
+        }
       }
 
     };
@@ -369,7 +374,7 @@
               $scope.centerChangedPromise = $timeout(function(){
                 Coordinate.promiseFrom(map.getCenter()).then(function(coordinate){$scope.center = coordinate.toJson(); });
                 $scope.zoom = map.getZoom();
-              }, 200);
+              }, 100);
             });
           });
         });
@@ -394,22 +399,16 @@
         position:'=?'
       },
       link: function($scope, element, attr, mapController){
-        $scope.$watchGroup(["options", "position"], function(newValue){
-          var newOptions = newValue[0];
-          var newPosition = newValue[1];
+        $scope.$watchGroup(["position", "options"], function(nv){
+          var data = {position:nv[0], options:nv[1]};
 
-          if(newPosition != null && (newOptions == null || newOptions.position == null)) {
-            newOptions = newOptions || {};
-            newOptions.position = newPosition;
-          }
-
-          if($scope.markerPromise == null) $scope.markerPromise = mapController.addMarker(newValue);
+          if($scope.markerPromise == null) $scope.markerPromise = mapController.addMarker(data);
           else {
             $scope.markerPromise.then(function(polygon){
               polygon.setMap(null);
-              $scope.markerPromise = mapController.addMarker(newValue);
+              $scope.markerPromise = mapController.addMarker(data);
             }, function(){
-              $scope.markerPromise = mapController.addMarker(newValue);
+              $scope.markerPromise = mapController.addMarker(data);
             });
           }
 

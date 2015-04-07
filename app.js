@@ -6,6 +6,7 @@
       var self = this;
       this.center = {lat: 0, lng: 0};
       this.polygonOptions = {
+        editable: true,
         stroke:{
           color:'red',
           opacity:'1',
@@ -22,56 +23,37 @@
         ]
       };
 
-      $scope.$watch("center", function(nv, ov){
-        if(nv != null && nv.lat != null && nv.lng != null) console.log("new center : " + nv.lat + ", " + nv.lng);
-        else  console.log("new center but is null");
-      });
+      this.makeMarkers = function(n){
+        var markers = [];
+        for(var i=0; i< n; i++){
+          var lat = Math.random()*180/2 - 90/2;
+          var lng = Math.random()*360/4 - 180/4;
+          markers.push({lat:lat, lng:lng})
+        }
+        return markers;
+      };
 
-      $timeout(function(){
-        self.polygonPath = [
-          {lat:0, lng:0},
-          {lat:0, lng:100},
-          {lat:100, lng:100},
-          {lat:100, lng:0}
-        ];
-      }, 5000);
+      $scope.markers = this.makeMarkers(500);
 
-      this.polygonPath = [
-        {lat:0, lng:0},
-        {lat:0, lng:10},
-        {lat:10, lng:10},
-        {lat:10, lng:0}
-      ];
 
-      this.styles = [
-        {
+      this.styles = [{
           "elementType": "geometry",
-          "stylers": [
-            { "saturation": -100 }
-          ]
+          "stylers": [ { "saturation": -100 }]
         },{
           "featureType": "road.highway",
-          "stylers": [
-            { "visibility": "off" }
-          ]
+          "stylers": [{ "visibility": "off" }]
         },{
           "featureType": "road.arterial",
-          "stylers": [
-            { "visibility": "off" }
-          ]
+          "stylers": [{ "visibility": "off" }]
         },{
           "featureType": "poi",
           "elementType": "labels",
-          "stylers": [
-            { "visibility": "off" }
-          ]
+          "stylers": [{ "visibility": "off" }]
         },{
           "featureType": "transit.line",
-          "stylers": [
-            { "visibility": "off" }
-          ]
-        }
-      ];
+          "stylers": [{ "visibility": "off" }]
+      }];
+
     });
 
 
