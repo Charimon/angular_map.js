@@ -4,7 +4,8 @@
   angular.module('app', ['map'])
     .controller("AppController", function($timeout, $scope, $http){
       var self = this;
-      this.center = {lat: 0, lng: 0};
+      this.center = {lat: 47.577837, lng: -122.341721};
+      this.zoom = 12;
       this.polygonOptions = {
         editable: true,
         stroke:{
@@ -32,7 +33,7 @@
         }
         return markers;
       };
-      $scope.markers = this.makeMarkers(500);
+//      $scope.markers = this.makeMarkers(500);
 
       this.styles = [{"elementType": "geometry", "stylers": [ { "saturation": -100 }]},
         {"featureType": "road.highway", "stylers": [{ "visibility": "off" }]},
@@ -43,7 +44,7 @@
 
       this.loadPolygons = function(){
         $http.get("seattle_hoods.geo.json").then(function(responseData){
-          return responseData.data.features.slice(0, 100);
+          return responseData.data.features.slice(0, 1000);
         }).then(function(features){
           self.features = features;
         });

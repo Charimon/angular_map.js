@@ -90,9 +90,9 @@
 	  this.addFeature = function(feature){
 	    return GoogleMap.map().then(function(map){
 	      return Feature.promiseFrom(feature).then(function(feature){
-	//        var mapMarker = marker.toGoogle();
-	//        mapMarker.setMap(map);
-	//        return mapMarker;
+	        var mapFeature = feature.toGoogle();
+	        mapFeature.setMap(map);
+	        return mapFeature;
 	      });
 	    });
 	  };
@@ -267,7 +267,7 @@
 	  CoordinateModel.$inject = ['$q'];
 	  MarkerModel.$inject = ['Coordinate', '$q'];
 	  PolygonModel.$inject = ['$q', 'Coordinate'];
-	  MultiPolygonModel.$inject = ['$q'];
+	  MultiPolygonModel.$inject = ['$q', 'Polygon'];
 	  FeatureModel.$inject = ['$q', 'Coordinate', 'Polygon', 'MultiPolygon', 'Marker'];
 
 	  function MapOptionsModel(Coordinate, $q){
@@ -385,9 +385,7 @@
 	      else if (data instanceof Polygon) { resolve(data); }
 	      else if (window.google != null && window.google.maps != null && window.google.maps.Polygon != null && data instanceof window.google.maps.Polygon) { reject("data can't be parsed correctly of type google.maps.Polygon"); }
 	      else if (angular.isArray(data)) { resolve($q.all(data.map(Polygon.promiseFrom))); }
-	      else if (angular.isObject(data) && angular.isArray(data.coordinates) && data.type == "Polygon") {
-	        resolve(Coordinate.promiseFrom(data.coordinates).then(function(paths){ new Polygon({paths: paths}); }));
-	      }
+	      else if (angular.isObject(data) && angular.isArray(data.coordinates) && data.type == "Polygon") { resolve(Coordinate.promiseFrom(data.coordinates).then(function(paths){ return new Polygon({paths: paths}); })); }
 	      else if (angular.isObject(data)) { resolve(new Polygon(data)); }
 	      else { reject("data can't be parsed correctly"); }
 	    })};
@@ -407,7 +405,7 @@
 
 	    return Polygon;
 	  }
-	  function MultiPolygonModel($q){
+	  function MultiPolygonModel($q, Polygon){
 	    function MultiPolygonModel(options){
 	      for(var prop in options){
 	        if(options.hasOwnProperty(prop) && prop != "fill" && prop != "stroke"){
@@ -433,11 +431,30 @@
 	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
 	      else if (data instanceof MultiPolygonModel) { resolve(data); }
 	      else if (angular.isArray(data)){ resolve($q.all(data.map(MultiPolygonModel.promiseFrom))); }
-	      else if (angular.isObject(data)) { resolve(new MultiPolygonModel(data)); }
+	      else if (angular.isObject(data)) {
+	        var result = $q.all(data.coordinates.map(function(coordinates){
+	          var data = {coordinates: coordinates, type: "Polygon"};
+	          return Polygon.promiseFrom(data);
+	        })).then(function(polygons){
+	          data.polygons = polygons;
+	          return new MultiPolygonModel(data);
+	        });
+	          resolve(result);
+	      }
 	      else { reject("data can't be parsed correctly"); }
 	    })};
 
 	    MultiPolygonModel.prototype = {
+	      toGoogle: function(){
+	        var result = {};
+	        for(var prop in this){
+	          if(this.hasOwnProperty(prop)){
+	            if(this[prop] == null || this[prop].toGoogle == undefined) result[prop] = this[prop];
+	            else result[prop] = this[prop].toGoogle();
+	          }
+	        }
+	        return new google.maps.Polygon(result);
+	      }
 	    };
 
 	    return MultiPolygonModel;
@@ -493,9 +510,13 @@
 	      else if(angular.isArray(data)) { resolve($q.all(data.map(Feature.promiseFrom))); }
 	      else if(angular.isObject(data) && data.type == "Feature" && angular.isObject(data.geometry) && angular.isObject(data.properties)){
 	        if(data.geometry.type == "Polygon"){
-	          resolve(Polygon.promiseFrom(data.geometry).then(function(polygon){ return new Feature(polygon, data.properties)}));
+	          var feature = Polygon.promiseFrom(data.geometry).then(function(polygon){
+	            return new Feature(polygon, data.properties)
+	          });
+	          resolve(feature);
 	        } else if(data.geometry.type == "MultiPolygon"){
-	          resolve(MultiPolygon.promiseFrom(data.geometry).then(function(multiPolygon){ return new Feature(multiPolygon, data.properties)}))
+	          var feature = MultiPolygon.promiseFrom(data.geometry).then(function(multiPolygon){ return new Feature(multiPolygon, data.properties)});
+	          resolve(feature);
 	        } else {
 	          reject("data can't be parsed correctly");
 	        }
@@ -503,6 +524,12 @@
 	        reject("data can't be parsed correctly");
 	      }
 	    })};
+
+	    Feature.prototype = {
+	      toGoogle: function(){
+	        return this.geometry.toGoogle();
+	      }
+	    };
 
 	    return Feature;
 
