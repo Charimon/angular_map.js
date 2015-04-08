@@ -285,7 +285,7 @@
 
 	    //(data:Object) -> :Promise(:MapOptions|[:MapOptions])
 	    MapOptions.promiseFrom = function(data) { return $q(function(resolve, reject) {
-	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      if(data != null && angular.isFunction(data.then)){ resolve(data.then(MapOptions.promiseFrom)); }
 	      else if(data instanceof MapOptions) { resolve(data); }
 	      else if(window.google != null && window.google.maps != null && window.google.maps.MapOptions != null && data instanceof window.google.maps.MapOptions) { reject("data can't be parsed correctly is of type google.maps.MapOptions"); }
 	      else if(angular.isArray(data)) { resolve($q.all(data.map(MapOptions.promiseFrom))); }
@@ -335,7 +335,7 @@
 
 	    //(data:Object) -> :Promise(:Coordinate|[:Coordinate])
 	    Coordinate.promiseFrom = function(data) { return $q(function(resolve, reject) {
-	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      if(data != null && angular.isFunction(data.then)){ resolve(data.then(Coordinate.promiseFrom)); }
 	      else if(data instanceof Coordinate){ resolve(data); }
 	      else if(window.google != null && window.google.maps != null && window.google.maps.LatLng != null && data instanceof window.google.maps.LatLng) { resolve(new Coordinate(data.lat(), data.lng())); }
 	      else if(angular.isArray(data) && data.length == 2 && angular.isNumber(data[0]) && angular.isNumber(data[1])) { resolve(new Coordinate(data[1], data[0])); }
@@ -381,7 +381,7 @@
 
 	    //(data:Object) -> :Promise(:Polygon|[:Polygon])
 	    Polygon.promiseFrom = function(data) { return $q(function(resolve, reject) {
-	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      if(data != null && angular.isFunction(data.then)){ resolve(data.then(Polygon.promiseFrom)); }
 	      else if (data instanceof Polygon) { resolve(data); }
 	      else if (window.google != null && window.google.maps != null && window.google.maps.Polygon != null && data instanceof window.google.maps.Polygon) { reject("data can't be parsed correctly of type google.maps.Polygon"); }
 	      else if (angular.isArray(data)) { resolve($q.all(data.map(Polygon.promiseFrom))); }
@@ -428,7 +428,7 @@
 
 	    //(data:Object) -> :Promise(:MultiPolygonModel|[:MultiPolygonModel])
 	    MultiPolygonModel.promiseFrom = function(data) { return $q(function(resolve, reject) {
-	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      if(data != null && angular.isFunction(data.then)){ resolve(data.then(MultiPolygonModel.promiseFrom)); }
 	      else if (data instanceof MultiPolygonModel) { resolve(data); }
 	      else if (angular.isArray(data)){ resolve($q.all(data.map(MultiPolygonModel.promiseFrom))); }
 	      else if (angular.isObject(data)) {
@@ -472,7 +472,7 @@
 
 	    //(data:Object) -> :Promise(:Marker|[:Marker])
 	    Marker.promiseFrom = function(data) { return $q(function(resolve, reject){
-	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      if(data != null && angular.isFunction(data.then)){ resolve(data.then(Marker.promiseFrom)); }
 	      else if(data instanceof Marker){ resolve(data); }
 	      else if(window.google != null && window.google.maps != null && window.google.maps.Marker != null && data instanceof window.google.maps.Marker) { reject("data can't be parsed correctly of type google.maps.Marker"); }
 	      else if(angular.isArray(data)) { resolve($q.all(data.map(Marker.promiseFrom))); }
@@ -505,7 +505,7 @@
 
 	    //(data:Object) -> :Promise(:Feature|[:Feature])
 	    Feature.promiseFrom = function(data) { return $q(function(resolve, reject){
-	      if(data != null && angular.isFunction(data.then)){ resolve(data); }
+	      if(data != null && angular.isFunction(data.then)){ resolve(data.then(Feature.promiseFrom)); }
 	      else if(data instanceof Feature){ resolve(data); }
 	      else if(angular.isArray(data)) { resolve($q.all(data.map(Feature.promiseFrom))); }
 	      else if(angular.isObject(data) && data.type == "Feature" && angular.isObject(data.geometry) && angular.isObject(data.properties)){
