@@ -5,7 +5,7 @@
     .controller("AppController", function($timeout, $scope, $http, MapHelper){
       var self = this;
       this.center = [ -122.285118747505649, 47.630984505723774 ];
-      this.zoom = 16;
+      this.zoom = 3;
       this.polygonOptions = {
         editable: true,
         stroke:{
@@ -44,13 +44,10 @@
 
       this.loadPolygons = function(){
         $http.get("seattle_hoods.geo.json").then(function(responseData){
-          return responseData.data.features.slice(0, 1000);
+          return responseData.data.features.slice(0, 10);
         }).then(function(features){
           self.features = features;
-          MapHelper.fitBounds(features).then(function(bounds){
-
-            console.log(bounds);
-          });
+          MapHelper.fitBounds(features).then(function(bounds){});
         });
       };
 
