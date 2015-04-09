@@ -2,10 +2,10 @@
   'use strict';
 
   angular.module('app', ['map'])
-    .controller("AppController", function($timeout, $scope, $http){
+    .controller("AppController", function($timeout, $scope, $http, MapHelper){
       var self = this;
-      this.center = {lat: 47.577837, lng: -122.341721};
-      this.zoom = 12;
+      this.center = [ -122.285118747505649, 47.630984505723774 ];
+      this.zoom = 16;
       this.polygonOptions = {
         editable: true,
         stroke:{
@@ -18,9 +18,9 @@
           opacity:1
         },
         paths: [
-          {lat:25.774252, lng:-80.190262},
-          {lat:18.466465, lng:-66.118292},
-          {lat:32.321384, lng:-64.75737}
+          [ -122.285118747505649, 47.630984505723774 ],
+          [ -122.281328805231055, 47.630955937583138 ],
+          [ -122.281348980179004, 47.629750438199125 ]
         ]
       };
 
@@ -47,6 +47,10 @@
           return responseData.data.features.slice(0, 1000);
         }).then(function(features){
           self.features = features;
+          MapHelper.fitBounds(features).then(function(bounds){
+
+            console.log(bounds);
+          });
         });
       };
 

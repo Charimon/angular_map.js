@@ -12,13 +12,13 @@
       <div>{{app.center.lat | number:6}} {{app.center.lng | number:6}}</div>
     </div>
     <map center="app.center" zoom="app.zoom" styles="app.styles">
-      <!--<polygon options="app.polygonOptions"></polygon>-->
+      <!-- <polygon options="app.polygonOptions"></polygon> -->
 
       <!--<polygon options="app.polygonOptions">-->
         <!--<path ng-model="app.polygonPath"></path>-->
       <!--</polygon>-->
 
-      <marker position="marker" ng-repeat="marker in markers"></marker>
+      <!-- <marker position="marker" ng-repeat="marker in markers"></marker> -->
 
       <feature model="feature" ng-repeat="feature in app.features"></feature>
     </map>
