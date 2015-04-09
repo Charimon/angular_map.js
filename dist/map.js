@@ -45,418 +45,49 @@
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
-	__webpack_require__(1);
-	__webpack_require__(2);
-
-	angular.module('map', ['map.models', 'map.services'])
-	  .directive('map', mapDirective)
-	  .directive('marker', markerDirective)
-	  .directive('polygon', polygonDirective)
-	  .directive('path', pathDirective)
-	  .directive('feature', featureDirective)
-	  .directive('mapOptions', mapOptionsDirective)
-	  .controller('MapController', MapController)
-	  .controller('PolygonController', PolygonController)
-	  .controller('FeatureController', FeatureController);
-
-	MapController.$inject = ['$scope', '$q', 'GoogleMap', 'Marker', 'Polygon', 'Feature', 'UUID'];
-	PolygonController.$inject = ['$scope', '$q', 'Coordinate', 'UUID'];
-	FeatureController.$inject = ['$scope', '$q', 'Feature', 'Polygon', 'Marker', 'UUID'];
-	mapDirective.$inject = ['GoogleMap', 'Coordinate', 'MapOptions', '$timeout'];
-	polygonDirective.$inject = ['Polygon', '$q'];
-	markerDirective.$inject = ['Marker', '$q'];
-	pathDirective.$inject = ['Coordinate'];
-	featureDirective.$inject = ['$timeout'];
-
-	function MapController($scope, $q, GoogleMap, Marker, Polygon, Feature, UUID){
-	  //(polygon:Object) -> Promise(:google.maps.Polygon)
-	  this.addPolygon = function(polygon){
-	    return Polygon.promiseFrom(polygon).then(function(polygon){
-	      return GoogleMap.map().then(function(map){
-	        return polygon.fillMap(map);
-	      });
-	    });
-	  };
-	  //(marker:Object) -> Promise(:google.maps.Marker)
-	  this.addMarker = function(marker){
-	    return GoogleMap.map().then(function(map){
-	      return Marker.promiseFrom(marker).then(function(marker){
-	        return marker.fillMap(map);
-	      });
-	    });
-	  };
-	  //(feature:Object) -> Promise()
-	  this.addFeature = function(feature){
-	    return GoogleMap.map().then(function(map){
-	      return Feature.promiseFrom(feature).then(function(feature){
-	        return feature.fillMap(map);
-	      });
-	    });
-	  };
-	}
-	function PolygonController($scope, $q, Coordinate, UUID){
-	  this.setPath = function(coordinates){ return Coordinate.promiseFrom(coordinates).then(function(coordinates){
-	    return $scope.polygonPromise.then(function(polygon){
-	      polygon.setPaths(coordinates.map(function(c){return c.toGoogle()}));
-	    });
-	  })};
-	}
-	function FeatureController($scope, $q, Feature, Polygon, Marker, UUID){
-	  this.setOptions = function(type, options){
-	    $scope.featurePromise.then(function(feature){
-	      if(angular.isString(type) && type.toLowerCase() == "polygon" && feature.geometry instanceof Polygon) {
-	        var geo = feature.geometry.promiseFrom(options);
-	        feature.geometry.mappedObj.setOptions(options);
-	      }
-	      
-	    });
-	  }
-
-	}
-	function mapDirective(GoogleMap, Coordinate, MapOptions, $timeout){
-	  var GOOGLE_MAP_ID = "mapId";
-
-	  return {
-	    restrict: 'AE',
-	    template: "<div class='map' style='height:100%'>" +
-	        "<div style='height:100%' id='"+GOOGLE_MAP_ID+"'></div>" +
-	        "<div ng-transclude style='display: none'></div>"+
-	      "</div>",
-	    scope: {
-	      key:'@',
-	      center:'=',
-	      zoom:'=?',
-	      styles:'=',
-	      options:'=?'
-	    },
-	    transclude:true,
-	    controller: MapController,
-	    link: function($scope, element, attrs, controller){
-	      if($scope.zoom == null) $scope.zoom = 3;
-	      if($scope.center == null) $scope.center = {lat:0, lng: 0};
-
-	      MapOptions.promiseFrom({center: $scope.center, zoom: $scope.zoom, styles:$scope.styles, options:$scope.options}).then(function(options){
-	        GoogleMap.map($scope.key, GOOGLE_MAP_ID, options).then(function(map){
-	          google.maps.event.addListener(map, 'bounds_changed', function(){
-
-	            $timeout.cancel($scope.centerChangedPromise);
-	            $scope.centerChangedPromise = $timeout(function(){
-	              Coordinate.promiseFrom(map.getCenter()).then(function(coordinate){$scope.center = coordinate.toJson(); });
-	              $scope.zoom = map.getZoom();
-	            }, 100);
-	          });
-	        });
-	      });
-
-	      $scope.$watchGroup(["center", "zoom", "styles", "options"], function(nv,ov){ GoogleMap.map().then(function(map){
-	        var data = {center:nv[0], zoom:nv[1], styles:nv[2], options:nv[3]};
-	        MapOptions.promiseFrom(data).then(function(options){ options.fillMap(map); });
-	      })});
-
-	      $scope.$on("$destroy", function(){ GoogleMap.$destroy(); });
-
-	    }
-	  }
-	}
-	function markerDirective(Marker, $q){
-	  return {
-	    restrict: 'AE',
-	    require: '^map',
-	    scope: {
-	      options:'=?',
-	      position:'=?'
-	    },
-	    link: function($scope, element, attr, mapController){
-	      $scope.$watchGroup(["position", "options"], function(nv){
-	        var data = {position:nv[0], options:nv[1]};
-
-	        if($scope.markerPromise == null) $scope.markerPromise = mapController.addMarker(data);
-	        else {
-	          $scope.markerPromise.then(function(polygon){
-	            polygon.setMap(null);
-	            $scope.markerPromise = mapController.addMarker(data);
-	          }, function(){
-	            $scope.markerPromise = mapController.addMarker(data);
-	          });
-	        }
-
-	      });
-
-	    }
-	  }
-	}
-	function polygonDirective(Polygon, $q){
-	  return {
-	    restrict: 'AE',
-	    require: '^map',
-	    scope: {
-	      options:'=?'
-	    },
-	    controller: PolygonController,
-	    link: function($scope, element, attr, mapController){
-	      $scope.$watch("options", function(newValue){
-	        if($scope.polygonPromise == null) $scope.polygonPromise = mapController.addPolygon(newValue);
-	        else {
-	          $scope.polygonPromise.then(function(polygon){
-	            polygon.setMap(null);
-	            $scope.polygonPromise = mapController.addPolygon(newValue);
-	          }, function(error){
-	            $scope.polygonPromise = mapController.addPolygon(newValue);
-	          });
-	        }
-	      })
-
-	    }
-	  }
-	}
-	function pathDirective(Coordinate){
-	  return {
-	    restrict: 'AE',
-	    require: '^polygon',
-	    scope: {
-	      options:'=?',
-	      model:'='
-	    },
-	    link: function($scope, element, attr, polygonController){
-	      $scope.$watch("model", function(newValue){
-	        polygonController.setPath(newValue)
-	      });
-
-	    }
-	  }
-	}
-	function featureDirective($timeout){
-	  return {
-	    restrict: 'AE',
-	    require: '^map',
-	    scope: {
-	      model:'='
-	    },
-	    controller: FeatureController,
-	    link: function($scope, element, attr, mapController){
-	      $scope.$watch("model", function(nv){
-	        if($scope.featurePromise == null) $scope.featurePromise = mapController.addFeature(nv);
-	        else {
-	          $scope.featurePromise.then(function(feature){
-	            $scope.featurePromise = mapController.addFeature(nv);
-	          }, function(error){
-	            $scope.featurePromise = mapController.addFeature(nv);
-	          });
-	        }
-	      });
-	    }
-	  }
-	}
-
-	function mapOptionsDirective(Coordinate){
-	  return {
-	    restrict: 'AE',
-	    require: '^feature',
-	    scope: {
-	      type:'@',
-	      model:'='
-	    },
-	    link: function($scope, element, attr, featureController){
-	      $scope.$watchGroup(["model", "type"], function(nv){
-	        var newModel = nv[0];
-	        var newType = nv[1];
-	        featureController.setOptions(newType, newModel)
-	      });
-
-	    }
-	  }
-	}
-
-
-/***/ },
-/* 1 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
 
 	angular.module('map.models', [])
+	angular.module('map.services', [])
+	angular.module('map.directives', [])
 
 	__webpack_require__(6);
 	__webpack_require__(3);
 	__webpack_require__(4);
 	__webpack_require__(5);
 	__webpack_require__(9);
-
-
 	__webpack_require__(7);
 	__webpack_require__(8);
 
-/***/ },
-/* 2 */
-/***/ function(module, exports, __webpack_require__) {
 
-	(function(){
-	  'use strict';
-
-	  String.prototype.capitalize = function() {
-	    return this.charAt(0).toUpperCase() + this.slice(1);
-	  };
-
-	  angular.module('map.services', [])
-	    .service('LazyLoadGoogleMap', LazyLoadGoogleMap)
-	    .service('GoogleMap', GoogleMap)
-	    .service('MapHelper', MapHelper)
-	    .service('UUID', UUID);
-
-	  LazyLoadGoogleMap.$inject = ['$window', '$q', '$timeout'];
-	  GoogleMap.$inject = ['$q', 'LazyLoadGoogleMap', 'MapOptions'];
-	  MapHelper.$inject = ['GoogleMap', 'Coordinate', 'Feature', 'Bounds', '$q'];
-	  UUID.$inject = [];
+	__webpack_require__(10);
+	__webpack_require__(11);
+	__webpack_require__(13);
+	__webpack_require__(12);
 
 
-	  function LazyLoadGoogleMap($window, $q, $timeout){
-	    this.load = function(key) {
-	      function loadScript(){
-	        var script = document.createElement('script');
-	        script.type = 'text/javascript';
-	        script.src = 'https://maps.googleapis.com/maps/api/js?v=3.exp&callback=initGoogleMap';
-	        if(key != null) script.src += "&key=" + key;
-	        document.body.appendChild(script);
-	      }
-
-	      var deferred = $q.defer();
-	      if($window.google && $window.google.maps){
-	        $timeout(function(){deferred.resolve();});
-	      } else {
-	        $window.initGoogleMap = function(){ deferred.resolve() }
-
-	        if (document.readyState === "complete") { loadScript() }
-	        else if ($window.attachEvent) { $window.attachEvent('onload', loadScript); }
-	        else { $window.addEventListener('load', loadScript, false); }
-	      }
-
-	      return deferred.promise;
-	    }
-	  }
-	  function GoogleMap($q, LazyLoadGoogleMap, MapOptions){
-	    var mapPromise = null;
-	    var deferred = $q.defer();
-
-	    //(key:String, id:String, options:MapOptions) -> :Promise(:google.maps.Map)
-	    this.map = function(key, id, options) {
-	      if(mapPromise != null) return mapPromise;
-	      else if(key == null && id == null && options == null){
-	        return deferred.promise;
-	      } else{
-	        mapPromise = LazyLoadGoogleMap.load(key).then(function(){
-	          return new google.maps.Map(document.getElementById(id), options.toGoogle());
-	        });
-	        deferred.resolve(mapPromise);
-	        return mapPromise;
-	      }
-	    };
-	    this.$destroy = function(){
-	      mapPromise = null;
-	      deferred.reject("destroying map");
-	    }
-	  }
-
-	  function MapHelper(GoogleMap, Coordinate, Feature, Bounds, $q){
-	    var self = this;
-	    //[:{lat,lng}] => {lat, lng}
-	    this.getCenter = function(coordinates){
-	      return GoogleMap.map().then(function(){
-	        var bounds = new google.maps.LatLngBounds();
-
-	        return Coordinate.promiseFrom(coordinates).then(function(coordinates){
-	          angular.forEach(coordinates, function(coord){
-	            bounds.extend(coord.toGoogle());
-	          });
-
-	          if(!bounds.isEmpty()) return Coordinate.promiseFrom(bounds.getCenter()).then(function(coord){return coord.toJson()});
-	          else return $q.reject("no available center")
-	        });
+	__webpack_require__(15);
+	__webpack_require__(17);
+	__webpack_require__(18);
+	__webpack_require__(20);
+	__webpack_require__(21);
+	__webpack_require__(19);
 
 
-	      });
-	    }
-
-	    this.offsetCenter = function(coordinate, offsetX, offsetY) {
-	      return GoogleMap.map().then(function(map){
-	        var deferred = $q.defer();
-	        var ov = new google.maps.OverlayView();
-	        ov.onAdd = function() {
-	          var proj = this.getProjection();
-
-	          var toResolve = Coordinate.promiseFrom(coordinate).then(function(coordinate){
-	            var point = proj.fromLatLngToContainerPixel(coordinate.toGoogle());
-	            point.x = point.x + offsetX;
-	            point.y = point.y + offsetY;
-	            return proj.fromContainerPixelToLatLng(point);
-	          }).then(Coordinate.promiseFrom);
-
-	          deferred.resolve(toResolve);
-	        };
-	        ov.draw = function() {};
-	        ov.setMap(map);
-	        return deferred.promise;
-	      });
-	    }
-
-	    //THIS IS TIGHTLY bounds to Feature, need to unbind it
-	    this.boundingBox = function(objects) { return $q(function(resolve, reject){
-	      resolve($q.all(objects).then(Feature.promiseFrom).then(function(objects){
-	        var flattenedCoordinates = [];
-	        for(var i=0; i<objects.length; i++){
-	          var objectCoordinates = objects[i].flattenedCoordinates();
-	          flattenedCoordinates = flattenedCoordinates.concat(objectCoordinates);
-	        }
-	        var bounds = new google.maps.LatLngBounds();
-	        return Coordinate.promiseFrom(flattenedCoordinates).then(function(coordinates){
-	          angular.forEach(coordinates, function(coord){
-	            bounds.extend(coord.toGoogle());
-	          });
-
-	          if(!bounds.isEmpty()) return Bounds.promiseFrom(bounds).then(function(bounds){return bounds.toJson()});
-	          else return $q.reject("no available center")
-	        });
-	      }));
-	    })}
-
-	    this.fitBounds = function(objects) {return GoogleMap.map().then(function(map){
-	      return $q(function(resolve, reject){
-	        if(objects instanceof Bounds) { resolve(Bounds.promiseFrom(objects)) }
-	        else { resolve(Bounds.promiseFrom(self.boundingBox(objects))); }
-	      }).then(function(bounds){
-	        map.fitBounds(bounds.toGoogle());
-	        return bounds;
-	      });
-	      
-	    })}
-	  }
-
-	  //() -> :String
-	  function UUID(){
-	    var self = this;
-	    this.make = function(){
-	      var d = new Date().getTime();
-	      var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-	          var r = (d + Math.random()*16)%16 | 0;
-	          d = Math.floor(d/16);
-	          return (c=='x' ? r : (r&0x3|0x8)).toString(16);
-	      });
-	      return uuid;
-	    }
-	  }
-	})();
-
+	angular.module('map', ['map.models', 'map.services', 'map.directives']);
 
 /***/ },
+/* 1 */,
+/* 2 */,
 /* 3 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	angular.module('map.models').factory('Marker', MarkerModel);
+	angular.module('map.models').factory('Marker', Marker);
 
-	MarkerModel.$inject = ['Coordinate', '$q'];
+	Marker.$inject = ['Coordinate', '$q'];
 
-	function MarkerModel(Coordinate, $q){
+	function Marker(Coordinate, $q){
 	  function Marker(position, options){
 	    this.position = position;
 
@@ -868,10 +499,10 @@
 
 	'use strict';
 
-	angular.module('map.models').factory('Feature', FeatureModel);
-	FeatureModel.$inject = ['$q', 'Coordinate', 'Polygon', 'MultiPolygon', 'Marker'];
+	angular.module('map.models').factory('Feature', Feature);
+	Feature.$inject = ['$q', 'Coordinate', 'Polygon', 'MultiPolygon', 'Marker'];
 
-	function FeatureModel($q, Coordinate, Polygon, MultiPolygon, Marker){
+	function Feature($q, Coordinate, Polygon, MultiPolygon, Marker){
 	  function Feature(geometry, properties){
 	    this.geometry = geometry;
 	    this.properties = properties;
@@ -909,6 +540,455 @@
 	  };
 
 	  return Feature;
+	}
+
+/***/ },
+/* 10 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	angular.module('map.services').service('UUID', UUID);
+	UUID.$inject = [];
+
+
+	//() -> :String
+	function UUID(){
+	  var self = this;
+	  this.make = function(){
+	    var d = new Date().getTime();
+	    var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+	        var r = (d + Math.random()*16)%16 | 0;
+	        d = Math.floor(d/16);
+	        return (c=='x' ? r : (r&0x3|0x8)).toString(16);
+	    });
+	    return uuid;
+	  }
+	}
+
+/***/ },
+/* 11 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	angular.module('map.services').service('MapHelper', MapHelper);
+	MapHelper.$inject = ['GoogleMap', 'Coordinate', 'Feature', 'Bounds', '$q'];
+
+	function MapHelper(GoogleMap, Coordinate, Feature, Bounds, $q){
+	  var self = this;
+	  //[:{lat,lng}] => {lat, lng}
+	  this.getCenter = function(coordinates){
+	    return GoogleMap.map().then(function(){
+	      var bounds = new google.maps.LatLngBounds();
+
+	      return Coordinate.promiseFrom(coordinates).then(function(coordinates){
+	        angular.forEach(coordinates, function(coord){
+	          bounds.extend(coord.toGoogle());
+	        });
+
+	        if(!bounds.isEmpty()) return Coordinate.promiseFrom(bounds.getCenter()).then(function(coord){return coord.toJson()});
+	        else return $q.reject("no available center")
+	      });
+
+
+	    });
+	  }
+
+	  this.offsetCenter = function(coordinate, offsetX, offsetY) {
+	    return GoogleMap.map().then(function(map){
+	      var deferred = $q.defer();
+	      var ov = new google.maps.OverlayView();
+	      ov.onAdd = function() {
+	        var proj = this.getProjection();
+
+	        var toResolve = Coordinate.promiseFrom(coordinate).then(function(coordinate){
+	          var point = proj.fromLatLngToContainerPixel(coordinate.toGoogle());
+	          point.x = point.x + offsetX;
+	          point.y = point.y + offsetY;
+	          return proj.fromContainerPixelToLatLng(point);
+	        }).then(Coordinate.promiseFrom);
+
+	        deferred.resolve(toResolve);
+	      };
+	      ov.draw = function() {};
+	      ov.setMap(map);
+	      return deferred.promise;
+	    });
+	  }
+
+	  //THIS IS TIGHTLY bounds to Feature, need to unbind it
+	  this.boundingBox = function(objects) { return $q(function(resolve, reject){
+	    resolve($q.all(objects).then(Feature.promiseFrom).then(function(objects){
+	      var flattenedCoordinates = [];
+	      for(var i=0; i<objects.length; i++){
+	        var objectCoordinates = objects[i].flattenedCoordinates();
+	        flattenedCoordinates = flattenedCoordinates.concat(objectCoordinates);
+	      }
+	      var bounds = new google.maps.LatLngBounds();
+	      return Coordinate.promiseFrom(flattenedCoordinates).then(function(coordinates){
+	        angular.forEach(coordinates, function(coord){
+	          bounds.extend(coord.toGoogle());
+	        });
+
+	        if(!bounds.isEmpty()) return Bounds.promiseFrom(bounds).then(function(bounds){return bounds.toJson()});
+	        else return $q.reject("no available center")
+	      });
+	    }));
+	  })}
+
+	  this.fitBounds = function(objects) {return GoogleMap.map().then(function(map){
+	    return $q(function(resolve, reject){
+	      if(objects instanceof Bounds) { resolve(Bounds.promiseFrom(objects)) }
+	      else { resolve(Bounds.promiseFrom(self.boundingBox(objects))); }
+	    }).then(function(bounds){
+	      map.fitBounds(bounds.toGoogle());
+	      return bounds;
+	    });
+	    
+	  })}
+	}
+
+/***/ },
+/* 12 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	angular.module('map.services').service('GoogleMap', GoogleMap);
+	GoogleMap.$inject = ['$q', 'LazyLoadGoogleMap', 'MapOptions'];
+
+	function GoogleMap($q, LazyLoadGoogleMap, MapOptions){
+	  var mapPromise = null;
+	  var deferred = $q.defer();
+
+	  //(key:String, id:String, options:MapOptions) -> :Promise(:google.maps.Map)
+	  this.map = function(key, id, options) {
+	    if(mapPromise != null) return mapPromise;
+	    else if(key == null && id == null && options == null){
+	      return deferred.promise;
+	    } else{
+	      mapPromise = LazyLoadGoogleMap.load(key).then(function(){
+	        return new google.maps.Map(document.getElementById(id), options.toGoogle());
+	      });
+	      deferred.resolve(mapPromise);
+	      return mapPromise;
+	    }
+	  };
+	  this.$destroy = function(){
+	    mapPromise = null;
+	    deferred.reject("destroying map");
+	  }
+	}
+
+/***/ },
+/* 13 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	angular.module('map.services').service('LazyLoadGoogleMap', LazyLoadGoogleMap);
+	LazyLoadGoogleMap.$inject = ['$window', '$q', '$timeout'];
+
+
+	function LazyLoadGoogleMap($window, $q, $timeout){
+	  this.load = function(key) {
+	    function loadScript(){
+	      var script = document.createElement('script');
+	      script.type = 'text/javascript';
+	      script.src = 'https://maps.googleapis.com/maps/api/js?v=3.exp&callback=initGoogleMap';
+	      if(key != null) script.src += "&key=" + key;
+	      document.body.appendChild(script);
+	    }
+
+	    var deferred = $q.defer();
+	    if($window.google && $window.google.maps){
+	      $timeout(function(){deferred.resolve();});
+	    } else {
+	      $window.initGoogleMap = function(){ deferred.resolve() }
+
+	      if (document.readyState === "complete") { loadScript() }
+	      else if ($window.attachEvent) { $window.attachEvent('onload', loadScript); }
+	      else { $window.addEventListener('load', loadScript, false); }
+	    }
+
+	    return deferred.promise;
+	  }
+	}
+
+/***/ },
+/* 14 */,
+/* 15 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	angular.module('map.directives')
+	  .directive('map', mapDirective)
+	  .controller('MapController', MapController)
+
+	mapDirective.$inject = ['GoogleMap', 'Coordinate', 'MapOptions', '$timeout'];
+	MapController.$inject = ['$scope', '$q', 'GoogleMap', 'Marker', 'Polygon', 'Feature', 'UUID'];
+
+	function mapDirective(GoogleMap, Coordinate, MapOptions, $timeout){
+	  var GOOGLE_MAP_ID = "mapId";
+
+	  return {
+	    restrict: 'AE',
+	    template: "<div class='map' style='height:100%'>" +
+	        "<div style='height:100%' id='"+GOOGLE_MAP_ID+"'></div>" +
+	        "<div ng-transclude style='display: none'></div>"+
+	      "</div>",
+	    scope: {
+	      key:'@',
+	      center:'=',
+	      zoom:'=?',
+	      styles:'=',
+	      options:'=?'
+	    },
+	    transclude:true,
+	    controller: MapController,
+	    link: function($scope, element, attrs, controller){
+	      if($scope.zoom == null) $scope.zoom = 3;
+	      if($scope.center == null) $scope.center = {lat:0, lng: 0};
+
+	      MapOptions.promiseFrom({center: $scope.center, zoom: $scope.zoom, styles:$scope.styles, options:$scope.options}).then(function(options){
+	        GoogleMap.map($scope.key, GOOGLE_MAP_ID, options).then(function(map){
+	          google.maps.event.addListener(map, 'bounds_changed', function(){
+
+	            $timeout.cancel($scope.centerChangedPromise);
+	            $scope.centerChangedPromise = $timeout(function(){
+	              Coordinate.promiseFrom(map.getCenter()).then(function(coordinate){$scope.center = coordinate.toJson(); });
+	              $scope.zoom = map.getZoom();
+	            }, 100);
+	          });
+	        });
+	      });
+
+	      $scope.$watchGroup(["center", "zoom", "styles", "options"], function(nv,ov){ GoogleMap.map().then(function(map){
+	        var data = {center:nv[0], zoom:nv[1], styles:nv[2], options:nv[3]};
+	        MapOptions.promiseFrom(data).then(function(options){ options.fillMap(map); });
+	      })});
+
+	      $scope.$on("$destroy", function(){ GoogleMap.$destroy(); });
+
+	    }
+	  }
+	}
+
+	function MapController($scope, $q, GoogleMap, Marker, Polygon, Feature, UUID){
+	  //(polygon:Object) -> Promise(:google.maps.Polygon)
+	  this.addPolygon = function(polygon){
+	    return Polygon.promiseFrom(polygon).then(function(polygon){
+	      return GoogleMap.map().then(function(map){
+	        return polygon.fillMap(map);
+	      });
+	    });
+	  };
+	  //(marker:Object) -> Promise(:google.maps.Marker)
+	  this.addMarker = function(marker){
+	    return GoogleMap.map().then(function(map){
+	      return Marker.promiseFrom(marker).then(function(marker){
+	        return marker.fillMap(map);
+	      });
+	    });
+	  };
+	  //(feature:Object) -> Promise()
+	  this.addFeature = function(feature){
+	    return GoogleMap.map().then(function(map){
+	      return Feature.promiseFrom(feature).then(function(feature){
+	        return feature.fillMap(map);
+	      });
+	    });
+	  };
+	}
+
+/***/ },
+/* 16 */,
+/* 17 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+	angular.module('map.directives').directive('shapeOptions', shapeOptions)
+
+
+	function shapeOptions(Coordinate){
+	  return {
+	    restrict: 'AE',
+	    require: '^feature',
+	    scope: {
+	      type:'@',
+	      model:'='
+	    },
+	    link: function($scope, element, attr, featureController){
+	      $scope.$watchGroup(["model", "type"], function(nv){
+	        var newModel = nv[0];
+	        var newType = nv[1];
+	        featureController.setOptions(newType, newModel)
+	      });
+
+	    }
+	  }
+	}
+
+
+/***/ },
+/* 18 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	angular.module('map.directives').directive('path', path)
+	path.$inject = ['Coordinate'];
+
+	function path(Coordinate){
+	  return {
+	    restrict: 'AE',
+	    require: '^polygon',
+	    scope: {
+	      options:'=?',
+	      model:'='
+	    },
+	    link: function($scope, element, attr, polygonController){
+	      $scope.$watch("model", function(newValue){
+	        polygonController.setPath(newValue)
+	      });
+
+	    }
+	  }
+	}
+
+/***/ },
+/* 19 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	angular.module('map.directives')
+	  .directive('feature', feature)
+	  .controller('FeatureController', FeatureController)
+
+	FeatureController.$inject = ['$scope', '$q', 'Feature', 'Polygon', 'Marker', 'UUID'];
+	feature.$inject = ['$timeout'];
+
+	function FeatureController($scope, $q, Feature, Polygon, Marker, UUID){
+	  this.setOptions = function(type, options){
+	    $scope.featurePromise.then(function(feature){
+	      if(angular.isString(type) && type.toLowerCase() == "polygon" && feature.geometry instanceof Polygon) {
+	        var geo = feature.geometry.promiseFrom(options);
+	        feature.geometry.mappedObj.setOptions(options);
+	      }
+	      
+	    });
+	  }
+	}
+
+	function feature($timeout){
+	  return {
+	    restrict: 'AE',
+	    require: '^map',
+	    scope: {
+	      model:'='
+	    },
+	    controller: FeatureController,
+	    link: function($scope, element, attr, mapController){
+	      $scope.$watch("model", function(nv){
+	        if($scope.featurePromise == null) $scope.featurePromise = mapController.addFeature(nv);
+	        else {
+	          $scope.featurePromise.then(function(feature){
+	            $scope.featurePromise = mapController.addFeature(nv);
+	          }, function(error){
+	            $scope.featurePromise = mapController.addFeature(nv);
+	          });
+	        }
+	      });
+	    }
+	  }
+	}
+
+/***/ },
+/* 20 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	angular.module('map.directives').directive('marker', markerDirective)
+	markerDirective.$inject = ['Marker', '$q'];
+
+	function markerDirective(Marker, $q){
+	  return {
+	    restrict: 'AE',
+	    require: '^map',
+	    scope: {
+	      options:'=?',
+	      position:'=?'
+	    },
+	    link: function($scope, element, attr, mapController){
+	      $scope.$watchGroup(["position", "options"], function(nv){
+	        var data = {position:nv[0], options:nv[1]};
+
+	        if($scope.markerPromise == null) $scope.markerPromise = mapController.addMarker(data);
+	        else {
+	          $scope.markerPromise.then(function(polygon){
+	            polygon.setMap(null);
+	            $scope.markerPromise = mapController.addMarker(data);
+	          }, function(){
+	            $scope.markerPromise = mapController.addMarker(data);
+	          });
+	        }
+
+	      });
+
+	    }
+	  }
+	}
+
+/***/ },
+/* 21 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	angular.module('map.directives')
+	  .directive('polygon', polygon)
+	  .controller('PolygonController', PolygonController);
+
+	PolygonController.$inject = ['$scope', '$q', 'Coordinate', 'UUID'];
+	polygon.$inject = ['Polygon', '$q'];
+
+
+
+	function PolygonController($scope, $q, Coordinate, UUID){
+	  this.setPath = function(coordinates){ return Coordinate.promiseFrom(coordinates).then(function(coordinates){
+	    return $scope.polygonPromise.then(function(polygon){
+	      polygon.setPaths(coordinates.map(function(c){return c.toGoogle()}));
+	    });
+	  })};
+	}
+
+	function polygon(Polygon, $q){
+	  return {
+	    restrict: 'AE',
+	    require: '^map',
+	    scope: {
+	      options:'=?'
+	    },
+	    controller: PolygonController,
+	    link: function($scope, element, attr, mapController){
+	      $scope.$watch("options", function(newValue){
+	        if($scope.polygonPromise == null) $scope.polygonPromise = mapController.addPolygon(newValue);
+	        else {
+	          $scope.polygonPromise.then(function(polygon){
+	            polygon.setMap(null);
+	            $scope.polygonPromise = mapController.addPolygon(newValue);
+	          }, function(error){
+	            $scope.polygonPromise = mapController.addPolygon(newValue);
+	          });
+	        }
+	      })
+
+	    }
+	  }
 	}
 
 /***/ }
